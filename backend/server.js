@@ -15,6 +15,15 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
 app.use(cors());
 app.use(express.json());
 
+db.connect((err) => {
+  if (err) {
+    console.error("Database connection failed:", err);
+    return;
+  }
+
+  console.log("Connected to MySQL database");
+});
+
 // -----------------------------
 // Helpers
 // -----------------------------
