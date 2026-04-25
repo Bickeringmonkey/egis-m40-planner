@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
+const roleOptions = [
+  "admin",
+  "planner",
+  "viewer",
+  "supervisor",
+  "night_manager",
+  "lead_scheduler",
+];
+
 function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [message, setMessage] = useState("");
@@ -159,9 +168,11 @@ function AdminUsers() {
                 value={newUser.role}
                 onChange={handleNewUserChange}
               >
-                <option value="admin">admin</option>
-                <option value="planner">planner</option>
-                <option value="viewer">viewer</option>
+                {roleOptions.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -192,6 +203,7 @@ function AdminUsers() {
                 <th>Action</th>
               </tr>
             </thead>
+
             <tbody>
               {!loading && users.length === 0 ? (
                 <tr>
@@ -208,6 +220,7 @@ function AdminUsers() {
                         }
                       />
                     </td>
+
                     <td>
                       <input
                         value={user.email || ""}
@@ -216,6 +229,7 @@ function AdminUsers() {
                         }
                       />
                     </td>
+
                     <td>
                       <select
                         value={user.role || "viewer"}
@@ -223,20 +237,28 @@ function AdminUsers() {
                           handleExistingChange(user.id, "role", e.target.value)
                         }
                       >
-                        <option value="admin">admin</option>
-                        <option value="planner">planner</option>
-                        <option value="viewer">viewer</option>
+                        {roleOptions.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
                       </select>
                     </td>
+
                     <td>
                       <input
                         type="checkbox"
                         checked={!!user.is_active}
                         onChange={(e) =>
-                          handleExistingChange(user.id, "is_active", e.target.checked)
+                          handleExistingChange(
+                            user.id,
+                            "is_active",
+                            e.target.checked
+                          )
                         }
                       />
                     </td>
+
                     <td>
                       <input
                         type="password"
@@ -247,11 +269,9 @@ function AdminUsers() {
                         }
                       />
                     </td>
+
                     <td>
-                      <button
-                        type="button"
-                        onClick={() => updateUser(user)}
-                      >
+                      <button type="button" onClick={() => updateUser(user)}>
                         Save
                       </button>
                     </td>
