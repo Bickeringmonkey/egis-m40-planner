@@ -32,6 +32,7 @@ import WorkSheet from "./pages/WorkSheet";
 import SupervisorCheckSheet from "./pages/SupervisorCheckSheet";
 import NightManagerReview from "./pages/NightManagerReview";
 import LeadSchedulerReview from "./pages/LeadSchedulerReview";
+import Checksheet from "./pages/Checksheet";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -70,6 +71,12 @@ function AppShell() {
       to: "/supervisor-checksheet",
       label: "Supervisor Checks",
       icon: ClipboardCheck,
+      roles: ["admin", "supervisor"],
+    },
+    {
+      to: "/checksheet",
+      label: "Checklist",
+      icon: ClipboardList,
       roles: ["admin", "supervisor"],
     },
     {
@@ -308,6 +315,14 @@ function AppShell() {
             element={
               <ProtectedRoute roles={["admin", "supervisor"]}>
                 <SupervisorCheckSheet />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/checksheet"
+            element={
+              <ProtectedRoute roles={["admin", "supervisor"]}>
+                <Checksheet />
               </ProtectedRoute>
             }
           />
