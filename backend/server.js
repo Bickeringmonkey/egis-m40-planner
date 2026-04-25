@@ -290,26 +290,31 @@ app.get("/api/workstreams", auth, (req, res) => {
 
 app.get("/api/dashboard/overview", auth, (req, res) => {
   const totalJobsSql = `SELECT COUNT(*) AS totalJobs FROM jobs`;
+
   const completedJobsSql = `
     SELECT COUNT(*) AS completedJobs
     FROM jobs
     WHERE LOWER(status) = 'complete'
   `;
+
   const plannedJobsSql = `
     SELECT COUNT(*) AS plannedJobs
     FROM jobs
     WHERE LOWER(status) = 'planned'
   `;
+
   const cancelledJobsSql = `
     SELECT COUNT(*) AS cancelledJobs
     FROM jobs
     WHERE LOWER(status) = 'cancelled'
   `;
+
   const jobsByStatusSql = `
     SELECT status, COUNT(*) AS count
     FROM jobs
     GROUP BY status
   `;
+
   const jobsByWorkstreamSql = `
     SELECT
       workstreams.name AS workstream,
@@ -319,6 +324,7 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
     GROUP BY workstreams.name
     ORDER BY count DESC
   `;
+
   const upcomingJobsSql = `
     SELECT
       jobs.id,
@@ -334,6 +340,7 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
     ORDER BY jobs.planned_date ASC, jobs.job_number ASC
     LIMIT 5
   `;
+
   const recentClosuresSql = `
     SELECT
       id,
@@ -347,6 +354,17 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
     FROM closures
     ORDER BY COALESCE(start_date, closure_date) DESC, id DESC
     LIMIT 5
+  `;
+
+  const completionWorkflowSql = `
+    SELECT
+      COUNT(*) AS total,
+      COALESCE(SUM(CASE WHEN supervisor_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingSupervisor,
+      COALESCE(SUM(CASE WHEN supervisor_checked = 1 AND paperwork_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingPaperwork,
+      COALESCE(SUM(CASE WHEN paperwork_checked = 1 AND night_manager_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingManager,
+      COALESCE(SUM(CASE WHEN night_manager_checked = 1 AND lead_scheduler_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingFinal,
+      COALESCE(SUM(CASE WHEN lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS complete
+    FROM jobs
   `;
 
   db.query(totalJobsSql, (err1, totalJobsRes) => {
@@ -373,23 +391,38 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
                 db.query(recentClosuresSql, (err8, recentClosuresRes) => {
                   if (err8) return res.status(500).json({ error: "Failed to fetch dashboard data" });
 
-                  res.json({
-                    summary: {
-                      totalJobs: Number(totalJobsRes[0]?.totalJobs || 0),
-                      completedJobs: Number(completedJobsRes[0]?.completedJobs || 0),
-                      plannedJobs: Number(plannedJobsRes[0]?.plannedJobs || 0),
-                      cancelledJobs: Number(cancelledJobsRes[0]?.cancelledJobs || 0),
-                    },
-                    jobsByStatus: jobsByStatusRes.map((row) => ({
-                      name: row.status || "Unknown",
-                      value: Number(row.count || 0),
-                    })),
-                    jobsByWorkstream: jobsByWorkstreamRes.map((row) => ({
-                      name: row.workstream || "Unknown",
-                      value: Number(row.count || 0),
-                    })),
-                    upcomingJobs: upcomingJobsRes,
-                    recentClosures: recentClosuresRes,
+                  db.query(completionWorkflowSql, (err9, completionWorkflowRes) => {
+                    if (err9) {
+                      console.error("Completion workflow dashboard error:", err9);
+                      return res.status(500).json({ error: "Failed to fetch dashboard data" });
+                    }
+
+                    res.json({
+                      summary: {
+                        totalJobs: Number(totalJobsRes[0]?.totalJobs || 0),
+                        completedJobs: Number(completedJobsRes[0]?.completedJobs || 0),
+                        plannedJobs: Number(plannedJobsRes[0]?.plannedJobs || 0),
+                        cancelledJobs: Number(cancelledJobsRes[0]?.cancelledJobs || 0),
+                      },
+                      jobsByStatus: jobsByStatusRes.map((row) => ({
+                        name: row.status || "Unknown",
+                        value: Number(row.count || 0),
+                      })),
+                      jobsByWorkstream: jobsByWorkstreamRes.map((row) => ({
+                        name: row.workstream || "Unknown",
+                        value: Number(row.count || 0),
+                      })),
+                      upcomingJobs: upcomingJobsRes,
+                      recentClosures: recentClosuresRes,
+                      completionWorkflow: {
+                        total: Number(completionWorkflowRes[0]?.total || 0),
+                        awaitingSupervisor: Number(completionWorkflowRes[0]?.awaitingSupervisor || 0),
+                        awaitingPaperwork: Number(completionWorkflowRes[0]?.awaitingPaperwork || 0),
+                        awaitingManager: Number(completionWorkflowRes[0]?.awaitingManager || 0),
+                        awaitingFinal: Number(completionWorkflowRes[0]?.awaitingFinal || 0),
+                        complete: Number(completionWorkflowRes[0]?.complete || 0),
+                      },
+                    });
                   });
                 });
               });
@@ -1294,6 +1327,12 @@ app.put(
     const jobId = req.params.id;
     const { supervisor_checked, paperwork_checked, completion_notes } = req.body;
 
+    if (paperwork_checked && !supervisor_checked) {
+      return res.status(400).json({
+        error: "Works must be marked complete before paperwork can be checked.",
+      });
+    }
+
     const sql = `
       UPDATE jobs
       SET
@@ -1343,34 +1382,59 @@ app.put(
     const jobId = req.params.id;
     const { night_manager_checked } = req.body;
 
-    const sql = `
-      UPDATE jobs
-      SET
-        night_manager_checked = ?,
-        night_manager_checked_by = ?,
-        night_manager_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
-      WHERE id = ?
-    `;
-
     db.query(
-      sql,
-      [
-        night_manager_checked ? 1 : 0,
-        night_manager_checked ? req.user.id : null,
-        night_manager_checked ? 1 : 0,
-        jobId,
-      ],
-      (err, result) => {
-        if (err) {
-          console.error("Night manager check error:", err);
-          return res.status(500).json({ error: "Failed to save night manager check" });
+      `SELECT paperwork_checked FROM jobs WHERE id = ?`,
+      [jobId],
+      (checkErr, checkResults) => {
+        if (checkErr) {
+          console.error("Night manager pre-check error:", checkErr);
+          return res.status(500).json({ error: "Failed to check job status" });
         }
 
-        if (result.affectedRows === 0) {
+        if (checkResults.length === 0) {
           return res.status(404).json({ error: "Job not found" });
         }
 
-        res.json({ message: "Night manager check saved" });
+        const job = checkResults[0];
+
+        if (night_manager_checked && !job.paperwork_checked) {
+          return res.status(400).json({
+            error: "Paperwork must be checked first.",
+          });
+        }
+
+        const sql = `
+          UPDATE jobs
+          SET
+            night_manager_checked = ?,
+            night_manager_checked_by = ?,
+            night_manager_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
+          WHERE id = ?
+        `;
+
+        db.query(
+          sql,
+          [
+            night_manager_checked ? 1 : 0,
+            night_manager_checked ? req.user.id : null,
+            night_manager_checked ? 1 : 0,
+            jobId,
+          ],
+          (err, result) => {
+            if (err) {
+              console.error("Night manager check error:", err);
+              return res.status(500).json({
+                error: "Failed to save night manager check",
+              });
+            }
+
+            if (result.affectedRows === 0) {
+              return res.status(404).json({ error: "Job not found" });
+            }
+
+            res.json({ message: "Night manager check saved" });
+          }
+        );
       }
     );
   }
@@ -1384,36 +1448,61 @@ app.put(
     const jobId = req.params.id;
     const { lead_scheduler_checked } = req.body;
 
-    const sql = `
-      UPDATE jobs
-      SET
-        lead_scheduler_checked = ?,
-        lead_scheduler_checked_by = ?,
-        lead_scheduler_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
-        status = CASE WHEN ? = 1 THEN 'Complete' ELSE status END
-      WHERE id = ?
-    `;
-
     db.query(
-      sql,
-      [
-        lead_scheduler_checked ? 1 : 0,
-        lead_scheduler_checked ? req.user.id : null,
-        lead_scheduler_checked ? 1 : 0,
-        lead_scheduler_checked ? 1 : 0,
-        jobId,
-      ],
-      (err, result) => {
-        if (err) {
-          console.error("Lead scheduler check error:", err);
-          return res.status(500).json({ error: "Failed to save lead scheduler check" });
+      `SELECT night_manager_checked FROM jobs WHERE id = ?`,
+      [jobId],
+      (checkErr, checkResults) => {
+        if (checkErr) {
+          console.error("Lead scheduler pre-check error:", checkErr);
+          return res.status(500).json({ error: "Failed to check job status" });
         }
 
-        if (result.affectedRows === 0) {
+        if (checkResults.length === 0) {
           return res.status(404).json({ error: "Job not found" });
         }
 
-        res.json({ message: "Lead scheduler check saved" });
+        const job = checkResults[0];
+
+        if (lead_scheduler_checked && !job.night_manager_checked) {
+          return res.status(400).json({
+            error: "Manager check must be completed first.",
+          });
+        }
+
+        const sql = `
+          UPDATE jobs
+          SET
+            lead_scheduler_checked = ?,
+            lead_scheduler_checked_by = ?,
+            lead_scheduler_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+            status = CASE WHEN ? = 1 THEN 'Complete' ELSE status END
+          WHERE id = ?
+        `;
+
+        db.query(
+          sql,
+          [
+            lead_scheduler_checked ? 1 : 0,
+            lead_scheduler_checked ? req.user.id : null,
+            lead_scheduler_checked ? 1 : 0,
+            lead_scheduler_checked ? 1 : 0,
+            jobId,
+          ],
+          (err, result) => {
+            if (err) {
+              console.error("Lead scheduler check error:", err);
+              return res.status(500).json({
+                error: "Failed to save lead scheduler check",
+              });
+            }
+
+            if (result.affectedRows === 0) {
+              return res.status(404).json({ error: "Job not found" });
+            }
+
+            res.json({ message: "Lead scheduler check saved" });
+          }
+        );
       }
     );
   }

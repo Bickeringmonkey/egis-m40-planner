@@ -51,12 +51,7 @@ function LeadSchedulerReview() {
   const updateLocalJob = (jobId, field, value) => {
     setJobs((prev) =>
       prev.map((job) =>
-        job.id === jobId
-          ? {
-              ...job,
-              [field]: value,
-            }
-          : job
+        job.id === jobId ? { ...job, [field]: value } : job
       )
     );
   };
@@ -103,19 +98,12 @@ function LeadSchedulerReview() {
         <div className="filter-grid-compact">
           <div className="form-group">
             <label>Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
           <div className="form-group">
             <label>Closure</label>
-            <select
-              value={closureId}
-              onChange={(e) => setClosureId(e.target.value)}
-            >
+            <select value={closureId} onChange={(e) => setClosureId(e.target.value)}>
               <option value="">Select closure</option>
               {closures.map((closure) => (
                 <option key={closure.id} value={closure.id}>
@@ -126,11 +114,7 @@ function LeadSchedulerReview() {
           </div>
 
           <div className="filter-actions-inline">
-            <button
-              type="button"
-              className="detail-btn detail-btn-secondary"
-              onClick={loadJobs}
-            >
+            <button type="button" className="detail-btn detail-btn-secondary" onClick={loadJobs}>
               Load Final Review
             </button>
           </div>
@@ -142,10 +126,8 @@ function LeadSchedulerReview() {
           <h2 style={{ marginTop: 0 }}>{selectedClosure.closure_ref}</h2>
           <p>
             <strong>Date:</strong> {formatDate(date)} &nbsp; | &nbsp;
-            <strong>Carriageway:</strong> {selectedClosure.carriageway || "N/A"}{" "}
-            &nbsp; | &nbsp;
-            <strong>Junctions:</strong>{" "}
-            {selectedClosure.junctions_between || "N/A"}
+            <strong>Carriageway:</strong> {selectedClosure.carriageway || "N/A"} &nbsp; | &nbsp;
+            <strong>Junctions:</strong> {selectedClosure.junctions_between || "N/A"}
           </p>
         </div>
       )}
@@ -196,12 +178,10 @@ function LeadSchedulerReview() {
                       <input
                         type="checkbox"
                         checked={!!job.lead_scheduler_checked}
+                        disabled={!job.night_manager_checked}
+                        title={!job.night_manager_checked ? "Manager check must be completed first" : ""}
                         onChange={(e) =>
-                          updateLocalJob(
-                            job.id,
-                            "lead_scheduler_checked",
-                            e.target.checked ? 1 : 0
-                          )
+                          updateLocalJob(job.id, "lead_scheduler_checked", e.target.checked ? 1 : 0)
                         }
                       />
                     </td>

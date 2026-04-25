@@ -21,6 +21,14 @@ function Dashboard() {
     jobsByWorkstream: [],
     upcomingJobs: [],
     recentClosures: [],
+    completionWorkflow: {
+      total: 0,
+      awaitingSupervisor: 0,
+      awaitingPaperwork: 0,
+      awaitingManager: 0,
+      awaitingFinal: 0,
+      complete: 0,
+    },
   });
 
   const [loading, setLoading] = useState(false);
@@ -44,7 +52,13 @@ function Dashboard() {
       setLoading(true);
       setError("");
       const response = await api.get("/dashboard/overview");
-      setData(response.data);
+
+      setData((prev) => ({
+        ...prev,
+        ...response.data,
+        completionWorkflow:
+          response.data.completionWorkflow || prev.completionWorkflow,
+      }));
     } catch (err) {
       console.error("Error fetching dashboard:", err);
       setError("Failed to load dashboard.");
@@ -78,6 +92,13 @@ function Dashboard() {
     : "0.0";
   const cancelledPct = totalJobs
     ? ((data.summary.cancelledJobs / totalJobs) * 100).toFixed(1)
+    : "0.0";
+
+  const workflow = data.completionWorkflow || {};
+  const workflowTotal = Number(workflow.total || 0);
+  const workflowComplete = Number(workflow.complete || 0);
+  const workflowPct = workflowTotal
+    ? ((workflowComplete / workflowTotal) * 100).toFixed(1)
     : "0.0";
 
   const STATUS_COLORS = ["#6f9ae3", "#74b96f", "#f0bb32", "#b07ad9", "#a8a8a8"];
@@ -145,6 +166,63 @@ function Dashboard() {
                 <div className="dashboard-kpi-label">Cancelled Jobs</div>
                 <div className="dashboard-kpi-value">{data.summary.cancelledJobs}</div>
                 <div className="dashboard-kpi-meta">{cancelledPct}% of total</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="dashboard-panel" style={{ marginBottom: "22px" }}>
+            <div className="dashboard-panel-header">
+              <div>
+                <h2>Completion Workflow</h2>
+                <p>Operational sign-off progress across all jobs</p>
+              </div>
+              <strong>{workflowPct}% complete</strong>
+            </div>
+
+            <div className="dashboard-kpi-grid">
+              <div className="dashboard-kpi-card">
+                <div className="dashboard-kpi-body">
+                  <div className="dashboard-kpi-label">Awaiting Supervisor</div>
+                  <div className="dashboard-kpi-value">
+                    {workflow.awaitingSupervisor || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-kpi-card">
+                <div className="dashboard-kpi-body">
+                  <div className="dashboard-kpi-label">Awaiting Paperwork</div>
+                  <div className="dashboard-kpi-value">
+                    {workflow.awaitingPaperwork || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-kpi-card">
+                <div className="dashboard-kpi-body">
+                  <div className="dashboard-kpi-label">Awaiting Manager</div>
+                  <div className="dashboard-kpi-value">
+                    {workflow.awaitingManager || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-kpi-card">
+                <div className="dashboard-kpi-body">
+                  <div className="dashboard-kpi-label">Awaiting Final</div>
+                  <div className="dashboard-kpi-value">
+                    {workflow.awaitingFinal || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-kpi-card">
+                <div className="dashboard-kpi-body">
+                  <div className="dashboard-kpi-label">Fully Complete</div>
+                  <div className="dashboard-kpi-value">
+                    {workflow.complete || 0}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
