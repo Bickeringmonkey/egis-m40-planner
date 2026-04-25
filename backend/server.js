@@ -155,7 +155,16 @@ app.post("/api/users", auth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "Name, email, password, and role are required" });
   }
 
-  if (!["admin", "planner", "viewer"].includes(role)) {
+  if (
+  ![
+    "admin",
+    "planner",
+    "viewer",
+    "supervisor",
+    "night_manager",
+    "lead_scheduler",
+  ].includes(role)
+) {
     return res.status(400).json({ error: "Invalid role" });
   }
 
@@ -189,7 +198,16 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "Name, email, and role are required" });
   }
 
-  if (!["admin", "planner", "viewer"].includes(role)) {
+  if (
+  ![
+    "admin",
+    "planner",
+    "viewer",
+    "supervisor",
+    "night_manager",
+    "lead_scheduler",
+  ].includes(role)
+) {
     return res.status(400).json({ error: "Invalid role" });
   }
 
@@ -1200,7 +1218,206 @@ app.get("/api/work-sheet", auth, (req, res) => {
     res.json(results);
   });
 });
+// -----------------------------
+// Completion Workflow
+// -----------------------------
 
+app.get(
+  "/api/checksheet/jobs",
+  auth,
+  requireRole("admin", "planner", "supervisor", "night_manager", "lead_scheduler"),
+  (req, res) => {
+    const { date, closureId } = req.query;
+
+    if (!date || !closureId) {
+      return res.status(400).json({ error: "Date and closure are required" });
+    }
+
+    const sql = `
+      SELECT
+        jobs.id,
+        jobs.job_number,
+        jobs.title,
+        jobs.work_order,
+        jobs.activity,
+        jobs.location,
+        jobs.description,
+        jobs.activity_code,
+        jobs.start_mp,
+        jobs.end_mp,
+        jobs.status,
+        jobs.planned_date,
+        jobs.notes,
+        jobs.supervisor_checked,
+        jobs.supervisor_checked_by,
+        jobs.supervisor_checked_at,
+        jobs.paperwork_checked,
+        jobs.paperwork_checked_by,
+        jobs.paperwork_checked_at,
+        jobs.night_manager_checked,
+        jobs.night_manager_checked_by,
+        jobs.night_manager_checked_at,
+        jobs.lead_scheduler_checked,
+        jobs.lead_scheduler_checked_by,
+        jobs.lead_scheduler_checked_at,
+        jobs.completion_notes,
+        workstreams.name AS workstream,
+        closures.closure_ref,
+        closures.carriageway,
+        closures.junctions_between,
+        closures.lane_configuration,
+        closures.nems_number
+      FROM jobs
+      LEFT JOIN closures ON jobs.closure_id = closures.id
+      LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+      WHERE jobs.planned_date = ?
+        AND jobs.closure_id = ?
+      ORDER BY workstreams.name, jobs.start_mp, jobs.job_number
+    `;
+
+    db.query(sql, [date, closureId], (err, results) => {
+      if (err) {
+        console.error("Error fetching checksheet jobs:", err);
+        return res.status(500).json({ error: "Failed to fetch checksheet jobs" });
+      }
+
+      res.json(results);
+    });
+  }
+);
+
+app.put(
+  "/api/jobs/:id/supervisor-check",
+  auth,
+  requireRole("admin", "supervisor"),
+  (req, res) => {
+    const jobId = req.params.id;
+    const { supervisor_checked, paperwork_checked, completion_notes } = req.body;
+
+    const sql = `
+      UPDATE jobs
+      SET
+        supervisor_checked = ?,
+        supervisor_checked_by = ?,
+        supervisor_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+        paperwork_checked = ?,
+        paperwork_checked_by = ?,
+        paperwork_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+        completion_notes = ?
+      WHERE id = ?
+    `;
+
+    db.query(
+      sql,
+      [
+        supervisor_checked ? 1 : 0,
+        supervisor_checked ? req.user.id : null,
+        supervisor_checked ? 1 : 0,
+        paperwork_checked ? 1 : 0,
+        paperwork_checked ? req.user.id : null,
+        paperwork_checked ? 1 : 0,
+        completion_notes || null,
+        jobId,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Supervisor check error:", err);
+          return res.status(500).json({ error: "Failed to save supervisor check" });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: "Job not found" });
+        }
+
+        res.json({ message: "Supervisor check saved" });
+      }
+    );
+  }
+);
+
+app.put(
+  "/api/jobs/:id/night-manager-check",
+  auth,
+  requireRole("admin", "night_manager"),
+  (req, res) => {
+    const jobId = req.params.id;
+    const { night_manager_checked } = req.body;
+
+    const sql = `
+      UPDATE jobs
+      SET
+        night_manager_checked = ?,
+        night_manager_checked_by = ?,
+        night_manager_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
+      WHERE id = ?
+    `;
+
+    db.query(
+      sql,
+      [
+        night_manager_checked ? 1 : 0,
+        night_manager_checked ? req.user.id : null,
+        night_manager_checked ? 1 : 0,
+        jobId,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Night manager check error:", err);
+          return res.status(500).json({ error: "Failed to save night manager check" });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: "Job not found" });
+        }
+
+        res.json({ message: "Night manager check saved" });
+      }
+    );
+  }
+);
+
+app.put(
+  "/api/jobs/:id/lead-scheduler-check",
+  auth,
+  requireRole("admin", "lead_scheduler"),
+  (req, res) => {
+    const jobId = req.params.id;
+    const { lead_scheduler_checked } = req.body;
+
+    const sql = `
+      UPDATE jobs
+      SET
+        lead_scheduler_checked = ?,
+        lead_scheduler_checked_by = ?,
+        lead_scheduler_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+        status = CASE WHEN ? = 1 THEN 'Complete' ELSE status END
+      WHERE id = ?
+    `;
+
+    db.query(
+      sql,
+      [
+        lead_scheduler_checked ? 1 : 0,
+        lead_scheduler_checked ? req.user.id : null,
+        lead_scheduler_checked ? 1 : 0,
+        lead_scheduler_checked ? 1 : 0,
+        jobId,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Lead scheduler check error:", err);
+          return res.status(500).json({ error: "Failed to save lead scheduler check" });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: "Job not found" });
+        }
+
+        res.json({ message: "Lead scheduler check saved" });
+      }
+    );
+  }
+);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
