@@ -4,7 +4,8 @@ import api from "../services/api";
 import logo from "../assets/egis-logo.png";
 
 function NightWorksPrint() {
-  const [date, setDate] = useState("2026-04-27");
+  const [startDate, setStartDate] = useState("2026-04-27");
+  const [endDate, setEndDate] = useState("2026-04-27");
   const [closureId, setClosureId] = useState("");
   const [closures, setClosures] = useState([]);
   const [nightWorks, setNightWorks] = useState([]);
@@ -12,10 +13,11 @@ function NightWorksPrint() {
   const [error, setError] = useState("");
 
   const generatedAt = new Date();
+  const effectiveEndDate = endDate || startDate;
 
   useEffect(() => {
     fetchClosures();
-    fetchNightWorks("2026-04-27", "");
+    fetchNightWorks("2026-04-27", "2026-04-27", "");
   }, []);
 
   const fetchClosures = async () => {
@@ -27,12 +29,17 @@ function NightWorksPrint() {
     }
   };
 
-  const fetchNightWorks = async (selectedDate, selectedClosureId) => {
+  const fetchNightWorks = async (
+    selectedStartDate,
+    selectedEndDate,
+    selectedClosureId
+  ) => {
     try {
       setLoading(true);
       setError("");
 
-      let url = `/nightworks?date=${selectedDate}`;
+      let url = `/nightworks?startDate=${selectedStartDate}&endDate=${selectedEndDate}`;
+
       if (selectedClosureId) {
         url += `&closureId=${selectedClosureId}`;
       }
@@ -48,7 +55,12 @@ function NightWorksPrint() {
   };
 
   const handleLoad = () => {
-    fetchNightWorks(date, closureId);
+    if (!startDate) {
+      setError("Please select a start date.");
+      return;
+    }
+
+    fetchNightWorks(startDate, effectiveEndDate, closureId);
   };
 
   const handlePrint = () => {
@@ -60,6 +72,16 @@ function NightWorksPrint() {
     return new Date(dateString).toLocaleDateString("en-GB");
   };
 
+  const formatDateRange = () => {
+    if (!startDate) return "";
+
+    if (!effectiveEndDate || startDate === effectiveEndDate) {
+      return formatDate(startDate);
+    }
+
+    return `${formatDate(startDate)} - ${formatDate(effectiveEndDate)}`;
+  };
+
   const formatDateTime = (dateObj) => {
     return dateObj.toLocaleString("en-GB", {
       day: "2-digit",
@@ -68,6 +90,19 @@ function NightWorksPrint() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const getClosureDateLabel = (closure) => {
+    const closureStart = closure.start_date || closure.closure_date;
+    const closureEnd = closure.end_date || closure.closure_date;
+
+    if (!closureStart && !closureEnd) return "";
+
+    if (closureStart === closureEnd || !closureEnd) {
+      return formatDate(closureStart);
+    }
+
+    return `${formatDate(closureStart)} - ${formatDate(closureEnd)}`;
   };
 
   const getStatusClass = (status) => {
@@ -90,6 +125,8 @@ function NightWorksPrint() {
           closure_id: job.closure_id,
           closure_ref: job.closure_ref,
           closure_date: job.closure_date,
+          start_date: job.start_date,
+          end_date: job.end_date,
           carriageway: job.carriageway,
           closure_type: job.closure_type,
           nems_number: job.nems_number,
@@ -138,12 +175,14 @@ function NightWorksPrint() {
           <Link to="/nightworks" className="back-link">
             ← Back to Night Works
           </Link>
+
           <button type="button" onClick={handlePrint}>
             Print / Save PDF
           </button>
         </div>
 
         <h1 className="page-title">Night Works Print View</h1>
+
         <p className="page-subtitle">
           Compact operational version for printing or export.
         </p>
@@ -151,12 +190,25 @@ function NightWorksPrint() {
         <div className="card">
           <div className="nightworks-filters">
             <div className="form-group">
-              <label htmlFor="print-date">Select Date</label>
+              <label htmlFor="print-start-date">Start Date</label>
               <input
-                id="print-date"
+                id="print-start-date"
                 type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  if (!endDate) setEndDate(e.target.value);
+                }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="print-end-date">End Date</label>
+              <input
+                id="print-end-date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
 
@@ -170,7 +222,7 @@ function NightWorksPrint() {
                 <option value="">All Closures</option>
                 {closures.map((closure) => (
                   <option key={closure.id} value={closure.id}>
-                    {closure.closure_ref} - {formatDate(closure.closure_date)}
+                    {closure.closure_ref} - {getClosureDateLabel(closure)}
                   </option>
                 ))}
               </select>
@@ -195,14 +247,17 @@ function NightWorksPrint() {
 
         <div className="print-meta-grid">
           <div>
-            <strong>Date:</strong> {formatDate(date)}
+            <strong>Date Range:</strong> {formatDateRange()}
           </div>
+
           <div>
             <strong>Generated:</strong> {formatDateTime(generatedAt)}
           </div>
+
           <div>
             <strong>Closures:</strong> {totalClosures}
           </div>
+
           <div>
             <strong>Total Jobs:</strong> {totalJobs}
           </div>
@@ -229,6 +284,7 @@ function NightWorksPrint() {
           {workstreamTotals.length > 0 && (
             <div className="card print-workstream-card">
               <h2 style={{ marginTop: 0 }}>Workstream Totals</h2>
+
               <div className="dashboard-grid" style={{ marginBottom: 0 }}>
                 {workstreamTotals.map((item) => (
                   <div key={item.name} className="stat-card">
@@ -257,10 +313,12 @@ function NightWorksPrint() {
           <div key={group.closure_id} className="print-closure-block">
             <div className="print-closure-meta">
               <h2>{group.closure_ref}</h2>
+
               <p>
-                {formatDate(group.closure_date)} | {group.carriageway} |{" "}
+                {getClosureDateLabel(group)} | {group.carriageway} |{" "}
                 {group.closure_type || "Closure"}
               </p>
+
               <p>
                 NEMS: {group.nems_number || "None"} | Junctions:{" "}
                 {group.junctions_between || "None"} | Lane:{" "}
@@ -272,6 +330,7 @@ function NightWorksPrint() {
               <table className="print-table">
                 <thead>
                   <tr>
+                    <th>Planned Date</th>
                     <th>Job No</th>
                     <th>Work Order</th>
                     <th>Activity</th>
@@ -280,14 +339,17 @@ function NightWorksPrint() {
                     <th>Status</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {group.jobs.map((job) => (
                     <tr key={job.id}>
+                      <td>{formatDate(job.planned_date)}</td>
                       <td>{job.job_number}</td>
                       <td>{job.work_order || ""}</td>
                       <td>{job.activity || job.title || ""}</td>
                       <td>{job.location || ""}</td>
                       <td>{job.workstream}</td>
+
                       <td>
                         <span className={getStatusClass(job.status)}>
                           {job.status}

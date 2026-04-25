@@ -31,6 +31,18 @@ function signToken(user) {
   );
 }
 
+function normaliseClosureDates(closure_date, start_date, end_date) {
+  const finalStartDate = start_date || closure_date || null;
+  const finalEndDate = end_date || start_date || closure_date || null;
+  const finalClosureDate = closure_date || finalStartDate || null;
+
+  return {
+    closure_date: finalClosureDate,
+    start_date: finalStartDate,
+    end_date: finalEndDate,
+  };
+}
+
 // -----------------------------
 // Public routes
 // -----------------------------
@@ -309,11 +321,13 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
       id,
       closure_ref,
       closure_date,
+      start_date,
+      end_date,
       carriageway,
       closure_type,
       status
     FROM closures
-    ORDER BY closure_date DESC, id DESC
+    ORDER BY COALESCE(start_date, closure_date) DESC, id DESC
     LIMIT 5
   `;
 
@@ -369,11 +383,43 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
   });
 });
 
+// -----------------------------
 // Closures
+// -----------------------------
 app.get("/api/closures", auth, (req, res) => {
-  const sql = `SELECT * FROM closures ORDER BY closure_date, closure_ref`;
+  const sql = `
+    SELECT *
+    FROM closures
+    ORDER BY COALESCE(start_date, closure_date), closure_ref
+  `;
+
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ error: "Database query failed" });
+    res.json(results);
+  });
+});
+
+app.get("/api/closures/by-range", auth, (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: "Start date and end date are required" });
+  }
+
+  const sql = `
+    SELECT *
+    FROM closures
+    WHERE COALESCE(start_date, closure_date) <= ?
+      AND COALESCE(end_date, closure_date) >= ?
+    ORDER BY COALESCE(start_date, closure_date), closure_ref
+  `;
+
+  db.query(sql, [endDate, startDate], (err, results) => {
+    if (err) {
+      console.error("Error fetching closures by range:", err);
+      return res.status(500).json({ error: "Failed to fetch closures" });
+    }
+
     res.json(results);
   });
 });
@@ -401,7 +447,7 @@ app.get("/api/closures/:id", auth, (req, res) => {
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     WHERE jobs.closure_id = ?
-    ORDER BY jobs.start_mp
+    ORDER BY jobs.planned_date, jobs.start_mp
   `;
 
   const slipRoadsSql = `
@@ -435,6 +481,8 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
   const {
     closure_ref,
     closure_date,
+    start_date,
+    end_date,
     carriageway,
     start_mp,
     end_mp,
@@ -457,10 +505,14 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
     slip_roads = [],
   } = req.body;
 
+  const dates = normaliseClosureDates(closure_date, start_date, end_date);
+
   const closureSql = `
     INSERT INTO closures (
       closure_ref,
       closure_date,
+      start_date,
+      end_date,
       carriageway,
       start_mp,
       end_mp,
@@ -481,14 +533,16 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
       tm_install_time,
       tm_clear_time
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
     closureSql,
     [
       closure_ref,
-      closure_date,
+      dates.closure_date,
+      dates.start_date,
+      dates.end_date,
       carriageway || null,
       start_mp || null,
       end_mp || null,
@@ -510,7 +564,10 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
       tm_clear_time || null,
     ],
     (err, result) => {
-      if (err) return res.status(500).json({ error: "Insert failed" });
+      if (err) {
+        console.error("Closure insert error:", err);
+        return res.status(500).json({ error: "Insert failed" });
+      }
 
       const closureId = result.insertId;
       const cleanedSlipRoads = slip_roads.map((sr) => (sr || "").trim()).filter(Boolean);
@@ -539,6 +596,8 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
   const {
     closure_ref,
     closure_date,
+    start_date,
+    end_date,
     carriageway,
     start_mp,
     end_mp,
@@ -561,11 +620,15 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
     slip_roads = [],
   } = req.body;
 
+  const dates = normaliseClosureDates(closure_date, start_date, end_date);
+
   const updateSql = `
     UPDATE closures
     SET
       closure_ref = ?,
       closure_date = ?,
+      start_date = ?,
+      end_date = ?,
       carriageway = ?,
       start_mp = ?,
       end_mp = ?,
@@ -592,7 +655,9 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
     updateSql,
     [
       closure_ref,
-      closure_date,
+      dates.closure_date,
+      dates.start_date,
+      dates.end_date,
       carriageway || null,
       start_mp || null,
       end_mp || null,
@@ -615,7 +680,10 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
       closureId,
     ],
     (err) => {
-      if (err) return res.status(500).json({ error: "Failed to update closure" });
+      if (err) {
+        console.error("Closure update error:", err);
+        return res.status(500).json({ error: "Failed to update closure" });
+      }
 
       db.query(`DELETE FROM closure_slip_roads WHERE closure_id = ?`, [closureId], (deleteErr) => {
         if (deleteErr) return res.status(500).json({ error: "Closure updated but slip roads cleanup failed" });
@@ -659,7 +727,9 @@ app.delete("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res
   });
 });
 
+// -----------------------------
 // Jobs
+// -----------------------------
 app.get("/api/jobs", auth, (req, res) => {
   const sql = `
     SELECT 
@@ -678,6 +748,8 @@ app.get("/api/jobs", auth, (req, res) => {
       jobs.planned_date,
       closures.closure_ref,
       closures.closure_date,
+      closures.start_date,
+      closures.end_date,
       workstreams.name AS workstream
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
@@ -687,6 +759,50 @@ app.get("/api/jobs", auth, (req, res) => {
 
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ error: "Database query failed" });
+    res.json(results);
+  });
+});
+
+app.get("/api/jobs/by-range", auth, (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: "Start date and end date are required" });
+  }
+
+  const sql = `
+    SELECT 
+      jobs.id,
+      jobs.job_number,
+      jobs.title,
+      jobs.work_order,
+      jobs.activity,
+      jobs.location,
+      jobs.description,
+      jobs.activity_code,
+      jobs.closure_id,
+      jobs.start_mp,
+      jobs.end_mp,
+      jobs.status,
+      jobs.planned_date,
+      closures.closure_ref,
+      closures.closure_date,
+      closures.start_date,
+      closures.end_date,
+      workstreams.name AS workstream
+    FROM jobs
+    LEFT JOIN closures ON jobs.closure_id = closures.id
+    LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+    WHERE jobs.planned_date BETWEEN ? AND ?
+    ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp
+  `;
+
+  db.query(sql, [startDate, endDate], (err, results) => {
+    if (err) {
+      console.error("Error fetching jobs by range:", err);
+      return res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+
     res.json(results);
   });
 });
@@ -711,6 +827,8 @@ app.get("/api/jobs/:id", auth, (req, res) => {
       jobs.workstream_id,
       closures.closure_ref,
       closures.closure_date,
+      closures.start_date,
+      closures.end_date,
       closures.carriageway,
       workstreams.name AS workstream
     FROM jobs
@@ -861,10 +979,18 @@ app.delete("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) =>
   });
 });
 
+// -----------------------------
 // Night works
+// -----------------------------
 app.get("/api/nightworks", auth, (req, res) => {
-  const { date, closureId } = req.query;
-  if (!date) return res.status(400).json({ error: "Date is required" });
+  const { date, startDate, endDate, closureId } = req.query;
+
+  const rangeStart = startDate || date;
+  const rangeEnd = endDate || date;
+
+  if (!rangeStart || !rangeEnd) {
+    return res.status(400).json({ error: "Date range is required" });
+  }
 
   let sql = `
     SELECT 
@@ -879,9 +1005,12 @@ app.get("/api/nightworks", auth, (req, res) => {
       jobs.start_mp,
       jobs.end_mp,
       jobs.status,
+      jobs.planned_date,
       jobs.closure_id,
       closures.closure_ref,
       closures.closure_date,
+      closures.start_date,
+      closures.end_date,
       closures.carriageway,
       closures.closure_type,
       closures.nems_number,
@@ -891,25 +1020,33 @@ app.get("/api/nightworks", auth, (req, res) => {
     FROM jobs
     INNER JOIN closures ON jobs.closure_id = closures.id
     INNER JOIN workstreams ON jobs.workstream_id = workstreams.id
-    WHERE closures.closure_date = ?
+    WHERE jobs.planned_date BETWEEN ? AND ?
+      AND COALESCE(closures.start_date, closures.closure_date) <= ?
+      AND COALESCE(closures.end_date, closures.closure_date) >= ?
   `;
 
-  const params = [date];
+  const params = [rangeStart, rangeEnd, rangeEnd, rangeStart];
 
   if (closureId) {
     sql += ` AND closures.id = ?`;
     params.push(closureId);
   }
 
-  sql += ` ORDER BY closures.closure_ref, workstreams.name, jobs.start_mp`;
+  sql += ` ORDER BY jobs.planned_date, closures.closure_ref, workstreams.name, jobs.start_mp`;
 
   db.query(sql, params, (err, results) => {
-    if (err) return res.status(500).json({ error: "Database query failed" });
+    if (err) {
+      console.error("Error fetching nightworks:", err);
+      return res.status(500).json({ error: "Database query failed" });
+    }
+
     res.json(results);
   });
 });
 
+// -----------------------------
 // Briefings
+// -----------------------------
 app.get("/api/closures/:id/briefing", auth, (req, res) => {
   const closureId = req.params.id;
 
@@ -933,7 +1070,7 @@ app.get("/api/closures/:id/briefing", auth, (req, res) => {
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     WHERE jobs.closure_id = ?
-    ORDER BY jobs.start_mp, jobs.job_number
+    ORDER BY jobs.planned_date, jobs.start_mp, jobs.job_number
   `;
 
   const slipRoadsSql = `
@@ -1007,11 +1144,18 @@ app.put("/api/closures/:id/briefing", auth, requireRole("admin", "planner"), (re
     res.json({ message: "Briefing saved successfully" });
   });
 });
-app.get("/api/work-sheet", auth, (req, res) => {
-  const { date, workstreamId } = req.query;
 
-  if (!date || !workstreamId) {
-    return res.status(400).json({ error: "Date and workstream are required" });
+// -----------------------------
+// Work Sheet
+// -----------------------------
+app.get("/api/work-sheet", auth, (req, res) => {
+  const { date, startDate, endDate, workstreamId } = req.query;
+
+  const rangeStart = startDate || date;
+  const rangeEnd = endDate || date;
+
+  if (!rangeStart || !rangeEnd || !workstreamId) {
+    return res.status(400).json({ error: "Date range and workstream are required" });
   }
 
   const sql = `
@@ -1031,6 +1175,8 @@ app.get("/api/work-sheet", auth, (req, res) => {
       workstreams.name AS workstream,
       closures.closure_ref,
       closures.closure_date,
+      closures.start_date,
+      closures.end_date,
       closures.carriageway,
       closures.junctions_between,
       closures.lane_configuration,
@@ -1038,12 +1184,14 @@ app.get("/api/work-sheet", auth, (req, res) => {
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
-    WHERE DATE(COALESCE(jobs.planned_date, closures.closure_date)) = ?
+    WHERE jobs.planned_date BETWEEN ? AND ?
       AND jobs.workstream_id = ?
-    ORDER BY closures.closure_ref, jobs.start_mp, jobs.job_number
+      AND COALESCE(closures.start_date, closures.closure_date) <= ?
+      AND COALESCE(closures.end_date, closures.closure_date) >= ?
+    ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
   `;
 
-  db.query(sql, [date, workstreamId], (err, results) => {
+  db.query(sql, [rangeStart, rangeEnd, workstreamId, rangeEnd, rangeStart], (err, results) => {
     if (err) {
       console.error("Error fetching worksheet:", err);
       return res.status(500).json({ error: "Failed to fetch worksheet" });

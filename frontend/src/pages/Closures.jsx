@@ -42,6 +42,37 @@ function Closures() {
     return new Date(dateString).toISOString().split("T")[0];
   };
 
+  const getClosureStartDate = (closure) => {
+    return closure.start_date || closure.closure_date || "";
+  };
+
+  const getClosureEndDate = (closure) => {
+    return closure.end_date || closure.start_date || closure.closure_date || "";
+  };
+
+  const formatClosureDateRange = (closure) => {
+    const start = getClosureStartDate(closure);
+    const end = getClosureEndDate(closure);
+
+    if (!start && !end) return "";
+    if (!end || normaliseDate(start) === normaliseDate(end)) {
+      return formatDate(start);
+    }
+
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  };
+
+  const dateFallsWithinClosure = (closure, selectedDate) => {
+    if (!selectedDate) return true;
+
+    const start = normaliseDate(getClosureStartDate(closure));
+    const end = normaliseDate(getClosureEndDate(closure));
+
+    if (!start && !end) return false;
+
+    return selectedDate >= start && selectedDate <= end;
+  };
+
   const getStatusClass = (status) => {
     if (!status) return "status-badge";
     const clean = status.toLowerCase();
@@ -79,8 +110,7 @@ function Closures() {
       const matchesCarriageway =
         !filters.carriageway || closure.carriageway === filters.carriageway;
 
-      const matchesDate =
-        !filters.date || normaliseDate(closure.closure_date) === filters.date;
+      const matchesDate = dateFallsWithinClosure(closure, filters.date);
 
       const matchesSearch =
         !searchText ||
@@ -115,6 +145,7 @@ function Closures() {
             <span className="mini-stat-label">Total</span>
             <span className="mini-stat-value">{closures.length}</span>
           </div>
+
           <div className="mini-stat">
             <span className="mini-stat-label">Showing</span>
             <span className="mini-stat-value">{filteredClosures.length}</span>
@@ -168,7 +199,7 @@ function Closures() {
           </div>
 
           <div className="form-group">
-            <label>Closure Date</label>
+            <label>Date Within Closure</label>
             <input
               type="date"
               name="date"
@@ -207,7 +238,7 @@ function Closures() {
               <thead>
                 <tr>
                   <th>Closure Ref</th>
-                  <th>Date</th>
+                  <th>Date Range</th>
                   <th>NEMS</th>
                   <th>Junctions</th>
                   <th>Cway</th>
@@ -218,6 +249,7 @@ function Closures() {
                   <th>Status</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filteredClosures.length > 0 ? (
                   filteredClosures.map((closure) => (
@@ -230,7 +262,8 @@ function Closures() {
                           {closure.closure_ref}
                         </Link>
                       </td>
-                      <td>{formatDate(closure.closure_date)}</td>
+
+                      <td>{formatClosureDateRange(closure)}</td>
                       <td>{closure.nems_number || ""}</td>
                       <td>{closure.junctions_between || ""}</td>
                       <td>{closure.carriageway || ""}</td>
@@ -238,6 +271,7 @@ function Closures() {
                       <td>{closure.start_mp ?? ""}</td>
                       <td>{closure.end_mp ?? ""}</td>
                       <td>{closure.closure_type || ""}</td>
+
                       <td>
                         <span className={getStatusClass(closure.status)}>
                           {closure.status}

@@ -10,6 +10,8 @@ function EditClosure() {
   const [form, setForm] = useState({
     closure_ref: "",
     closure_date: "",
+    start_date: "",
+    end_date: "",
     carriageway: "",
     start_mp: "",
     end_mp: "",
@@ -39,6 +41,11 @@ function EditClosure() {
     loadClosure();
   }, [id]);
 
+  const toInputDate = (value) => {
+    if (!value) return "";
+    return new Date(value).toISOString().split("T")[0];
+  };
+
   const loadClosure = async () => {
     try {
       setLoading(true);
@@ -51,11 +58,15 @@ function EditClosure() {
       const slipRoadNames = slipRoads.map((sr) => sr.slip_road_name);
       while (slipRoadNames.length < 6) slipRoadNames.push("");
 
+      const closureDate = toInputDate(closure.closure_date);
+      const startDate = toInputDate(closure.start_date || closure.closure_date);
+      const endDate = toInputDate(closure.end_date || closure.start_date || closure.closure_date);
+
       setForm({
         closure_ref: closure.closure_ref || "",
-        closure_date: closure.closure_date
-          ? new Date(closure.closure_date).toISOString().split("T")[0]
-          : "",
+        closure_date: closureDate || startDate,
+        start_date: startDate,
+        end_date: endDate,
         carriageway: closure.carriageway || "",
         start_mp: closure.start_mp || "",
         end_mp: closure.end_mp || "",
@@ -86,15 +97,30 @@ function EditClosure() {
   };
 
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
+    const { name, value } = e.target;
+
+    setForm((prev) => {
+      const updated = {
+        ...prev,
+        [name]: value,
+      };
+
+      if (name === "start_date" && !prev.closure_date) {
+        updated.closure_date = value;
+      }
+
+      if (name === "start_date" && !prev.end_date) {
+        updated.end_date = value;
+      }
+
+      return updated;
     });
   };
 
   const handleSlipRoadChange = (index, value) => {
     const updatedSlipRoads = [...form.slip_roads];
     updatedSlipRoads[index] = value;
+
     setForm({
       ...form,
       slip_roads: updatedSlipRoads,
@@ -105,13 +131,25 @@ function EditClosure() {
     e.preventDefault();
     setMessage("");
 
-    if (!form.closure_ref || !form.closure_date) {
-      setMessage("Please complete the required fields.");
+    const payload = {
+      ...form,
+      closure_date: form.closure_date || form.start_date,
+      start_date: form.start_date || form.closure_date,
+      end_date: form.end_date || form.start_date || form.closure_date,
+    };
+
+    if (!payload.closure_ref || !payload.start_date || !payload.end_date) {
+      setMessage("Please complete the closure ref, start date and end date.");
+      return;
+    }
+
+    if (payload.end_date < payload.start_date) {
+      setMessage("End date cannot be before start date.");
       return;
     }
 
     try {
-      await api.put(`/closures/${id}`, form);
+      await api.put(`/closures/${id}`, payload);
       setMessage("Closure updated successfully.");
       setTimeout(() => navigate(`/closures/${id}`), 700);
     } catch (err) {
@@ -152,32 +190,81 @@ function EditClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Closure Ref *</label>
-              <input type="text" name="closure_ref" value={form.closure_ref} onChange={handleChange} />
+              <input
+                type="text"
+                name="closure_ref"
+                value={form.closure_ref}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
-              <label>Closure Date *</label>
-              <input type="date" name="closure_date" value={form.closure_date} onChange={handleChange} />
+              <label>Start Date *</label>
+              <input
+                type="date"
+                name="start_date"
+                value={form.start_date}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>End Date *</label>
+              <input
+                type="date"
+                name="end_date"
+                value={form.end_date}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Primary Closure Date</label>
+              <input
+                type="date"
+                name="closure_date"
+                value={form.closure_date}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>NEMS Number</label>
-              <input type="text" name="nems_number" value={form.nems_number} onChange={handleChange} />
+              <input
+                type="text"
+                name="nems_number"
+                value={form.nems_number}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Junctions Between</label>
-              <input type="text" name="junctions_between" value={form.junctions_between} onChange={handleChange} />
+              <input
+                type="text"
+                name="junctions_between"
+                value={form.junctions_between}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Carriageway</label>
-              <input type="text" name="carriageway" value={form.carriageway} onChange={handleChange} />
+              <input
+                type="text"
+                name="carriageway"
+                value={form.carriageway}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Lane Configuration</label>
-              <select name="lane_configuration" value={form.lane_configuration} onChange={handleChange}>
+              <select
+                name="lane_configuration"
+                value={form.lane_configuration}
+                onChange={handleChange}
+              >
                 <option value="">Select lane</option>
                 <option value="L1">L1</option>
                 <option value="L1/2">L1/2</option>
@@ -192,7 +279,12 @@ function EditClosure() {
 
             <div className="form-group">
               <label>Closure Type</label>
-              <input type="text" name="closure_type" value={form.closure_type} onChange={handleChange} />
+              <input
+                type="text"
+                name="closure_type"
+                value={form.closure_type}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
@@ -212,42 +304,84 @@ function EditClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Start MP</label>
-              <input type="number" step="0.01" name="start_mp" value={form.start_mp} onChange={handleChange} />
+              <input
+                type="number"
+                step="0.01"
+                name="start_mp"
+                value={form.start_mp}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>End MP</label>
-              <input type="number" step="0.01" name="end_mp" value={form.end_mp} onChange={handleChange} />
+              <input
+                type="number"
+                step="0.01"
+                name="end_mp"
+                value={form.end_mp}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Cone On Time</label>
-              <input type="time" name="cone_on_time" value={form.cone_on_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="cone_on_time"
+                value={form.cone_on_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Cone Off Time</label>
-              <input type="time" name="cone_off_time" value={form.cone_off_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="cone_off_time"
+                value={form.cone_off_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>TM Install Time</label>
-              <input type="time" name="tm_install_time" value={form.tm_install_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="tm_install_time"
+                value={form.tm_install_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>TM Clear Time</label>
-              <input type="time" name="tm_clear_time" value={form.tm_clear_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="tm_clear_time"
+                value={form.tm_clear_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Briefing Time</label>
-              <input type="time" name="briefing_time" value={form.briefing_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="briefing_time"
+                value={form.briefing_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Depot</label>
-              <input type="text" name="depot" value={form.depot} onChange={handleChange} />
+              <input
+                type="text"
+                name="depot"
+                value={form.depot}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
@@ -256,22 +390,42 @@ function EditClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Duty Manager</label>
-              <input type="text" name="duty_manager" value={form.duty_manager} onChange={handleChange} />
+              <input
+                type="text"
+                name="duty_manager"
+                value={form.duty_manager}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Night Supervisor</label>
-              <input type="text" name="night_supervisor" value={form.night_supervisor} onChange={handleChange} />
+              <input
+                type="text"
+                name="night_supervisor"
+                value={form.night_supervisor}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group full-span">
               <label>Welfare Location</label>
-              <input type="text" name="welfare_location" value={form.welfare_location} onChange={handleChange} />
+              <input
+                type="text"
+                name="welfare_location"
+                value={form.welfare_location}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group full-span">
               <label>Nearest Hospital</label>
-              <input type="text" name="nearest_hospital" value={form.nearest_hospital} onChange={handleChange} />
+              <input
+                type="text"
+                name="nearest_hospital"
+                value={form.nearest_hospital}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
@@ -281,7 +435,13 @@ function EditClosure() {
             {form.slip_roads.map((slipRoad, index) => (
               <div className="form-group" key={index}>
                 <label>Slip Road {index + 1}</label>
-                <input type="text" value={slipRoad} onChange={(e) => handleSlipRoadChange(index, e.target.value)} />
+                <input
+                  type="text"
+                  value={slipRoad}
+                  onChange={(e) =>
+                    handleSlipRoadChange(index, e.target.value)
+                  }
+                />
               </div>
             ))}
           </div>
@@ -291,12 +451,18 @@ function EditClosure() {
           <div className="detail-form-grid single-column">
             <div className="form-group">
               <label>Notes</label>
-              <textarea name="notes" value={form.notes} onChange={handleChange} />
+              <textarea
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
           <div className="detail-form-actions">
-            <button type="submit" className="detail-btn">Save Changes</button>
+            <button type="submit" className="detail-btn">
+              Save Changes
+            </button>
 
             <button
               type="button"

@@ -9,6 +9,8 @@ function AddClosure() {
   const [form, setForm] = useState({
     closure_ref: "",
     closure_date: "",
+    start_date: "",
+    end_date: "",
     carriageway: "",
     start_mp: "",
     end_mp: "",
@@ -34,9 +36,23 @@ function AddClosure() {
   const [message, setMessage] = useState("");
 
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
+    const { name, value } = e.target;
+
+    setForm((prev) => {
+      const updated = {
+        ...prev,
+        [name]: value,
+      };
+
+      if (name === "start_date" && !prev.closure_date) {
+        updated.closure_date = value;
+      }
+
+      if (name === "start_date" && !prev.end_date) {
+        updated.end_date = value;
+      }
+
+      return updated;
     });
   };
 
@@ -54,13 +70,25 @@ function AddClosure() {
     e.preventDefault();
     setMessage("");
 
-    if (!form.closure_ref || !form.closure_date) {
-      setMessage("Please complete the required fields.");
+    const payload = {
+      ...form,
+      closure_date: form.closure_date || form.start_date,
+      start_date: form.start_date || form.closure_date,
+      end_date: form.end_date || form.start_date || form.closure_date,
+    };
+
+    if (!payload.closure_ref || !payload.start_date || !payload.end_date) {
+      setMessage("Please complete the closure ref, start date and end date.");
+      return;
+    }
+
+    if (payload.end_date < payload.start_date) {
+      setMessage("End date cannot be before start date.");
       return;
     }
 
     try {
-      const response = await api.post("/closures", form);
+      const response = await api.post("/closures", payload);
       const newId = response?.data?.id;
       setMessage("Closure created successfully.");
 
@@ -105,17 +133,52 @@ function AddClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Closure Ref *</label>
-              <input type="text" name="closure_ref" value={form.closure_ref} onChange={handleChange} />
+              <input
+                type="text"
+                name="closure_ref"
+                value={form.closure_ref}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
-              <label>Closure Date *</label>
-              <input type="date" name="closure_date" value={form.closure_date} onChange={handleChange} />
+              <label>Start Date *</label>
+              <input
+                type="date"
+                name="start_date"
+                value={form.start_date}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>End Date *</label>
+              <input
+                type="date"
+                name="end_date"
+                value={form.end_date}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Primary Closure Date</label>
+              <input
+                type="date"
+                name="closure_date"
+                value={form.closure_date}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>NEMS Number</label>
-              <input type="text" name="nems_number" value={form.nems_number} onChange={handleChange} />
+              <input
+                type="text"
+                name="nems_number"
+                value={form.nems_number}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
@@ -131,12 +194,21 @@ function AddClosure() {
 
             <div className="form-group">
               <label>Carriageway</label>
-              <input type="text" name="carriageway" value={form.carriageway} onChange={handleChange} />
+              <input
+                type="text"
+                name="carriageway"
+                value={form.carriageway}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Lane Configuration</label>
-              <select name="lane_configuration" value={form.lane_configuration} onChange={handleChange}>
+              <select
+                name="lane_configuration"
+                value={form.lane_configuration}
+                onChange={handleChange}
+              >
                 <option value="">Select lane</option>
                 <option value="L1">L1</option>
                 <option value="L1/2">L1/2</option>
@@ -151,7 +223,12 @@ function AddClosure() {
 
             <div className="form-group">
               <label>Closure Type</label>
-              <input type="text" name="closure_type" value={form.closure_type} onChange={handleChange} />
+              <input
+                type="text"
+                name="closure_type"
+                value={form.closure_type}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
@@ -171,42 +248,84 @@ function AddClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Start MP</label>
-              <input type="number" step="0.01" name="start_mp" value={form.start_mp} onChange={handleChange} />
+              <input
+                type="number"
+                step="0.01"
+                name="start_mp"
+                value={form.start_mp}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>End MP</label>
-              <input type="number" step="0.01" name="end_mp" value={form.end_mp} onChange={handleChange} />
+              <input
+                type="number"
+                step="0.01"
+                name="end_mp"
+                value={form.end_mp}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Cone On Time</label>
-              <input type="time" name="cone_on_time" value={form.cone_on_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="cone_on_time"
+                value={form.cone_on_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Cone Off Time</label>
-              <input type="time" name="cone_off_time" value={form.cone_off_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="cone_off_time"
+                value={form.cone_off_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>TM Install Time</label>
-              <input type="time" name="tm_install_time" value={form.tm_install_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="tm_install_time"
+                value={form.tm_install_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>TM Clear Time</label>
-              <input type="time" name="tm_clear_time" value={form.tm_clear_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="tm_clear_time"
+                value={form.tm_clear_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Briefing Time</label>
-              <input type="time" name="briefing_time" value={form.briefing_time} onChange={handleChange} />
+              <input
+                type="time"
+                name="briefing_time"
+                value={form.briefing_time}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Depot</label>
-              <input type="text" name="depot" value={form.depot} onChange={handleChange} />
+              <input
+                type="text"
+                name="depot"
+                value={form.depot}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
@@ -215,22 +334,42 @@ function AddClosure() {
           <div className="detail-form-grid">
             <div className="form-group">
               <label>Duty Manager</label>
-              <input type="text" name="duty_manager" value={form.duty_manager} onChange={handleChange} />
+              <input
+                type="text"
+                name="duty_manager"
+                value={form.duty_manager}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group">
               <label>Night Supervisor</label>
-              <input type="text" name="night_supervisor" value={form.night_supervisor} onChange={handleChange} />
+              <input
+                type="text"
+                name="night_supervisor"
+                value={form.night_supervisor}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group full-span">
               <label>Welfare Location</label>
-              <input type="text" name="welfare_location" value={form.welfare_location} onChange={handleChange} />
+              <input
+                type="text"
+                name="welfare_location"
+                value={form.welfare_location}
+                onChange={handleChange}
+              />
             </div>
 
             <div className="form-group full-span">
               <label>Nearest Hospital</label>
-              <input type="text" name="nearest_hospital" value={form.nearest_hospital} onChange={handleChange} />
+              <input
+                type="text"
+                name="nearest_hospital"
+                value={form.nearest_hospital}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
@@ -240,7 +379,13 @@ function AddClosure() {
             {form.slip_roads.map((slipRoad, index) => (
               <div className="form-group" key={index}>
                 <label>Slip Road {index + 1}</label>
-                <input type="text" value={slipRoad} onChange={(e) => handleSlipRoadChange(index, e.target.value)} />
+                <input
+                  type="text"
+                  value={slipRoad}
+                  onChange={(e) =>
+                    handleSlipRoadChange(index, e.target.value)
+                  }
+                />
               </div>
             ))}
           </div>
@@ -250,12 +395,18 @@ function AddClosure() {
           <div className="detail-form-grid single-column">
             <div className="form-group">
               <label>Notes</label>
-              <textarea name="notes" value={form.notes} onChange={handleChange} />
+              <textarea
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
           <div className="detail-form-actions">
-            <button type="submit" className="detail-btn">Create Closure</button>
+            <button type="submit" className="detail-btn">
+              Create Closure
+            </button>
 
             <button
               type="button"
