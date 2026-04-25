@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "https://egis-m40-planner-production.up.railway.app/api",
 });
 
 api.interceptors.request.use((config) => {
