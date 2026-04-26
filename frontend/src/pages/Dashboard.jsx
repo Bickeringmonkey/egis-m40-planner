@@ -1,35 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
 
 function Dashboard() {
+  const today = new Date().toISOString().split("T")[0];
+
   const [data, setData] = useState({
     summary: {
       totalJobs: 0,
-      completedJobs: 0,
-      plannedJobs: 0,
-      cancelledJobs: 0,
+      overallCompletePercent: 0,
+      monthlyCompletePercent: 0,
+      paperworkCheckedPercent: 0,
+      finalSignoffPercent: 0,
+      monthlyTotalJobs: 0,
+      monthlyCompleteJobs: 0,
     },
-    jobsByStatus: [],
-    jobsByWorkstream: [],
-    upcomingJobs: [],
-    recentClosures: [],
     completionWorkflow: {
-      total: 0,
       awaitingSupervisor: 0,
       awaitingPaperwork: 0,
       awaitingManager: 0,
       awaitingFinal: 0,
       complete: 0,
     },
+    workstreamCompletion: [],
+    monthlyWorkstreamCompletion: [],
+    upcomingJobs: [],
   });
+
+  const [closures, setClosures] = useState([]);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedClosureId, setSelectedClosureId] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,20 +44,51 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
+    fetchClosures();
     fetchDashboard();
   }, []);
 
-  const fetchDashboard = async () => {
+  const fetchClosures = async () => {
+    try {
+      const response = await api.get("/closures");
+      setClosures(response.data || []);
+    } catch (err) {
+      console.error("Error fetching closures:", err);
+    }
+  };
+
+  const fetchDashboard = async (date = selectedDate, closureId = selectedClosureId) => {
     try {
       setLoading(true);
       setError("");
-      const response = await api.get("/dashboard/overview");
+
+      const params = new URLSearchParams();
+
+      if (date) params.append("date", date);
+      if (closureId) params.append("closureId", closureId);
+
+      const queryString = params.toString();
+      const url = queryString
+        ? `/dashboard/overview?${queryString}`
+        : "/dashboard/overview";
+
+      const response = await api.get(url);
 
       setData((prev) => ({
         ...prev,
         ...response.data,
-        completionWorkflow:
-          response.data.completionWorkflow || prev.completionWorkflow,
+        summary: {
+          ...prev.summary,
+          ...(response.data.summary || {}),
+        },
+        completionWorkflow: {
+          ...prev.completionWorkflow,
+          ...(response.data.completionWorkflow || {}),
+        },
+        workstreamCompletion: response.data.workstreamCompletion || [],
+        monthlyWorkstreamCompletion:
+          response.data.monthlyWorkstreamCompletion || [],
+        upcomingJobs: response.data.upcomingJobs || [],
       }));
     } catch (err) {
       console.error("Error fetching dashboard:", err);
@@ -67,10 +98,28 @@ function Dashboard() {
     }
   };
 
+  const handleLoad = () => {
+    fetchDashboard(selectedDate, selectedClosureId);
+  };
+
+  const clearFilters = () => {
+    setSelectedDate("");
+    setSelectedClosureId("");
+    fetchDashboard("", "");
+  };
+
+  const loadToday = () => {
+    setSelectedDate(today);
+    setSelectedClosureId("");
+    fetchDashboard(today, "");
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "";
     return new Date(dateString).toLocaleDateString("en-GB");
   };
+
+  const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
 
   const getStatusClass = (status) => {
     if (!status) return "status-badge";
@@ -83,33 +132,18 @@ function Dashboard() {
     return "status-badge";
   };
 
-  const totalJobs = data.summary.totalJobs || 0;
-  const completedPct = totalJobs
-    ? ((data.summary.completedJobs / totalJobs) * 100).toFixed(1)
-    : "0.0";
-  const plannedPct = totalJobs
-    ? ((data.summary.plannedJobs / totalJobs) * 100).toFixed(1)
-    : "0.0";
-  const cancelledPct = totalJobs
-    ? ((data.summary.cancelledJobs / totalJobs) * 100).toFixed(1)
-    : "0.0";
-
+  const summary = data.summary || {};
   const workflow = data.completionWorkflow || {};
-  const workflowTotal = Number(workflow.total || 0);
-  const workflowComplete = Number(workflow.complete || 0);
-  const workflowPct = workflowTotal
-    ? ((workflowComplete / workflowTotal) * 100).toFixed(1)
-    : "0.0";
 
-  const STATUS_COLORS = ["#6f9ae3", "#74b96f", "#f0bb32", "#b07ad9", "#a8a8a8"];
-  const WORKSTREAM_COLORS = [
-    "#1f5fa7",
-    "#2ca7b8",
-    "#73ba63",
-    "#f0bb32",
-    "#aa72d1",
-    "#b3b3b3",
-  ];
+  const selectedClosure = closures.find(
+    (closure) => String(closure.id) === String(selectedClosureId)
+  );
+
+  const dashboardScopeLabel = selectedDate || selectedClosureId
+    ? `${selectedDate ? formatDate(selectedDate) : "All dates"}${
+        selectedClosure ? ` · ${selectedClosure.closure_ref}` : ""
+      }`
+    : "All jobs";
 
   return (
     <div className="dashboard-modern">
@@ -117,7 +151,7 @@ function Dashboard() {
         <div>
           <h1 className="dashboard-title-modern">Dashboard</h1>
           <p className="dashboard-subtitle-modern">
-            Welcome back. Here’s what’s happening in your M40 planning system.
+            Completion, paperwork and sign-off overview.
           </p>
         </div>
 
@@ -127,6 +161,64 @@ function Dashboard() {
         </div>
       </div>
 
+      <div className="filter-card filter-card-compact" style={{ marginBottom: "22px" }}>
+        <div className="filter-grid-compact">
+          <div className="form-group">
+            <label>Dashboard Date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Closure</label>
+            <select
+              value={selectedClosureId}
+              onChange={(e) => setSelectedClosureId(e.target.value)}
+            >
+              <option value="">All Closures</option>
+              {closures.map((closure) => (
+                <option key={closure.id} value={closure.id}>
+                  {closure.closure_ref}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-actions-inline">
+            <button
+              type="button"
+              className="detail-btn"
+              onClick={handleLoad}
+            >
+              Load Dashboard
+            </button>
+
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={loadToday}
+            >
+              Today
+            </button>
+
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={clearFilters}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <p style={{ marginBottom: 0 }}>
+          <strong>Current view:</strong> {dashboardScopeLabel}
+        </p>
+      </div>
+
       {error && <p>{error}</p>}
       {loading && <p>Loading dashboard...</p>}
 
@@ -134,38 +226,56 @@ function Dashboard() {
         <>
           <div className="dashboard-kpi-grid">
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-blue">📁</div>
+              <div className="dashboard-kpi-icon icon-green">%</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Total Jobs</div>
-                <div className="dashboard-kpi-value">{data.summary.totalJobs}</div>
-                <div className="dashboard-kpi-meta">All time</div>
+                <div className="dashboard-kpi-label">Overall Complete</div>
+                <div className="dashboard-kpi-value">
+                  {percent(summary.overallCompletePercent)}
+                </div>
+                <div className="dashboard-kpi-meta">
+                  {summary.finalCompleteJobs || 0} of {summary.totalJobs || 0} jobs
+                </div>
               </div>
             </div>
 
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-green">✓</div>
+              <div className="dashboard-kpi-icon icon-blue">📆</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Completed Jobs</div>
-                <div className="dashboard-kpi-value">{data.summary.completedJobs}</div>
-                <div className="dashboard-kpi-meta">{completedPct}% of total</div>
+                <div className="dashboard-kpi-label">This Month Complete</div>
+                <div className="dashboard-kpi-value">
+                  {percent(summary.monthlyCompletePercent)}
+                </div>
+                <div className="dashboard-kpi-meta">
+                  {summary.monthlyCompleteJobs || 0} of{" "}
+                  {summary.monthlyTotalJobs || 0} this month
+                </div>
               </div>
             </div>
 
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-yellow">◔</div>
+              <div className="dashboard-kpi-icon icon-yellow">🧾</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Planned Jobs</div>
-                <div className="dashboard-kpi-value">{data.summary.plannedJobs}</div>
-                <div className="dashboard-kpi-meta">{plannedPct}% of total</div>
+                <div className="dashboard-kpi-label">Paperwork Checked</div>
+                <div className="dashboard-kpi-value">
+                  {percent(summary.paperworkCheckedPercent)}
+                </div>
+                <div className="dashboard-kpi-meta">
+                  {summary.paperworkCheckedJobs || 0} of{" "}
+                  {summary.totalJobs || 0} jobs
+                </div>
               </div>
             </div>
 
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-purple">✕</div>
+              <div className="dashboard-kpi-icon icon-purple">✅</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Cancelled Jobs</div>
-                <div className="dashboard-kpi-value">{data.summary.cancelledJobs}</div>
-                <div className="dashboard-kpi-meta">{cancelledPct}% of total</div>
+                <div className="dashboard-kpi-label">Final Sign-Off</div>
+                <div className="dashboard-kpi-value">
+                  {percent(summary.finalSignoffPercent)}
+                </div>
+                <div className="dashboard-kpi-meta">
+                  Lead scheduler completion
+                </div>
               </div>
             </div>
           </div>
@@ -174,9 +284,8 @@ function Dashboard() {
             <div className="dashboard-panel-header">
               <div>
                 <h2>Completion Workflow</h2>
-                <p>Operational sign-off progress across all jobs</p>
+                <p>Where jobs currently sit in the sign-off chain</p>
               </div>
-              <strong>{workflowPct}% complete</strong>
             </div>
 
             <div className="dashboard-kpi-grid">
@@ -227,111 +336,48 @@ function Dashboard() {
             </div>
           </div>
 
-          <div className="dashboard-chart-grid">
-            <div className="dashboard-panel">
-              <div className="dashboard-panel-header">
-                <div>
-                  <h2>Jobs by Status</h2>
-                  <p>Breakdown of all jobs by current status</p>
-                </div>
-              </div>
-
-              <div className="dashboard-chart-content">
-                <div className="dashboard-chart-wrap">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={data.jobsByStatus}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={55}
-                        outerRadius={92}
-                        paddingAngle={2}
-                      >
-                        {data.jobsByStatus.map((entry, index) => (
-                          <Cell
-                            key={`status-${entry.name}`}
-                            fill={STATUS_COLORS[index % STATUS_COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="dashboard-legend-list">
-                  {data.jobsByStatus.map((item, index) => (
-                    <div key={item.name} className="dashboard-legend-item">
-                      <div className="dashboard-legend-left">
-                        <span
-                          className="dashboard-legend-dot"
-                          style={{
-                            backgroundColor:
-                              STATUS_COLORS[index % STATUS_COLORS.length],
-                          }}
-                        />
-                        <span>{item.name}</span>
-                      </div>
-                      <div className="dashboard-legend-value">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
+          <div className="dashboard-panel" style={{ marginBottom: "22px" }}>
+            <div className="dashboard-panel-header">
+              <div>
+                <h2>% Complete by Workstream</h2>
+                <p>Completion and paperwork progress for the current dashboard view</p>
               </div>
             </div>
 
-            <div className="dashboard-panel">
-              <div className="dashboard-panel-header">
-                <div>
-                  <h2>Jobs by Workstream</h2>
-                  <p>Distribution of jobs across workstreams</p>
-                </div>
-              </div>
+            <div className="table-wrapper">
+              <table className="enhanced-table dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Workstream</th>
+                    <th>Total Jobs</th>
+                    <th>Complete</th>
+                    <th>% Complete</th>
+                    <th>Paperwork %</th>
+                    <th>Manager Checked</th>
+                  </tr>
+                </thead>
 
-              <div className="dashboard-chart-content">
-                <div className="dashboard-chart-wrap">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={data.jobsByWorkstream}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={55}
-                        outerRadius={92}
-                        paddingAngle={2}
-                      >
-                        {data.jobsByWorkstream.map((entry, index) => (
-                          <Cell
-                            key={`ws-${entry.name}`}
-                            fill={
-                              WORKSTREAM_COLORS[index % WORKSTREAM_COLORS.length]
-                            }
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="dashboard-legend-list">
-                  {data.jobsByWorkstream.map((item, index) => (
-                    <div key={item.name} className="dashboard-legend-item">
-                      <div className="dashboard-legend-left">
-                        <span
-                          className="dashboard-legend-dot"
-                          style={{
-                            backgroundColor:
-                              WORKSTREAM_COLORS[index % WORKSTREAM_COLORS.length],
-                          }}
-                        />
-                        <span>{item.name}</span>
-                      </div>
-                      <div className="dashboard-legend-value">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                <tbody>
+                  {data.workstreamCompletion.length > 0 ? (
+                    data.workstreamCompletion.map((row) => (
+                      <tr key={row.workstream}>
+                        <td>{row.workstream}</td>
+                        <td>{row.totalJobs}</td>
+                        <td>{row.completeJobs}</td>
+                        <td>
+                          <strong>{percent(row.completePercent)}</strong>
+                        </td>
+                        <td>{percent(row.paperworkPercent)}</td>
+                        <td>{row.managerCheckedJobs || 0}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6">No workstream data found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -339,8 +385,49 @@ function Dashboard() {
             <div className="dashboard-panel">
               <div className="dashboard-panel-header">
                 <div>
+                  <h2>This Month by Workstream</h2>
+                  <p>Current month completion split</p>
+                </div>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="enhanced-table dashboard-table">
+                  <thead>
+                    <tr>
+                      <th>Workstream</th>
+                      <th>Total</th>
+                      <th>Complete</th>
+                      <th>% Complete</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {data.monthlyWorkstreamCompletion.length > 0 ? (
+                      data.monthlyWorkstreamCompletion.map((row) => (
+                        <tr key={row.workstream}>
+                          <td>{row.workstream}</td>
+                          <td>{row.totalJobs}</td>
+                          <td>{row.completeJobs}</td>
+                          <td>
+                            <strong>{percent(row.completePercent)}</strong>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="4">No jobs found for this month.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="dashboard-panel">
+              <div className="dashboard-panel-header">
+                <div>
                   <h2>Upcoming Jobs</h2>
-                  <p>Next 5 scheduled jobs</p>
+                  <p>Next 5 jobs for the current dashboard view</p>
                 </div>
                 <Link to="/jobs" className="dashboard-panel-link">
                   View all jobs
@@ -358,12 +445,16 @@ function Dashboard() {
                       <th>Status</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {data.upcomingJobs.length > 0 ? (
                       data.upcomingJobs.map((job) => (
                         <tr key={job.id}>
                           <td>
-                            <Link to={`/jobs/${job.id}`} className="table-link-strong">
+                            <Link
+                              to={`/jobs/${job.id}`}
+                              className="table-link-strong"
+                            >
                               {job.job_number}
                             </Link>
                           </td>
@@ -380,60 +471,6 @@ function Dashboard() {
                     ) : (
                       <tr>
                         <td colSpan="5">No upcoming jobs found.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="dashboard-panel">
-              <div className="dashboard-panel-header">
-                <div>
-                  <h2>Recent Closures</h2>
-                  <p>Latest 5 closure records</p>
-                </div>
-                <Link to="/closures" className="dashboard-panel-link">
-                  View all closures
-                </Link>
-              </div>
-
-              <div className="table-wrapper">
-                <table className="enhanced-table dashboard-table">
-                  <thead>
-                    <tr>
-                      <th>Closure Ref</th>
-                      <th>Date</th>
-                      <th>Carriageway</th>
-                      <th>Type</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recentClosures.length > 0 ? (
-                      data.recentClosures.map((closure) => (
-                        <tr key={closure.id}>
-                          <td>
-                            <Link
-                              to={`/closures/${closure.id}`}
-                              className="table-link-strong"
-                            >
-                              {closure.closure_ref}
-                            </Link>
-                          </td>
-                          <td>{formatDate(closure.closure_date)}</td>
-                          <td>{closure.carriageway || ""}</td>
-                          <td>{closure.closure_type || ""}</td>
-                          <td>
-                            <span className={getStatusClass(closure.status)}>
-                              {closure.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="5">No recent closures found.</td>
                       </tr>
                     )}
                   </tbody>
