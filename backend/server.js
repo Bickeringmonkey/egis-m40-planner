@@ -289,34 +289,46 @@ app.get("/api/workstreams", auth, (req, res) => {
 });
 
 app.get("/api/dashboard/overview", auth, (req, res) => {
+  const { date, closureId } = req.query;
+
+  const filters = [];
+  const params = [];
+
+  if (date) {
+    filters.push("jobs.planned_date = ?");
+    params.push(date);
+  }
+
+  if (closureId) {
+    filters.push("jobs.closure_id = ?");
+    params.push(closureId);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+
   const dashboardSql = `
     SELECT
       COUNT(*) AS totalJobs,
-
       COALESCE(SUM(CASE WHEN LOWER(status) = 'complete' THEN 1 ELSE 0 END), 0) AS completedJobs,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'planned' THEN 1 ELSE 0 END), 0) AS plannedJobs,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelledJobs,
-
       COALESCE(SUM(CASE WHEN lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS finalCompleteJobs,
       COALESCE(SUM(CASE WHEN paperwork_checked = 1 THEN 1 ELSE 0 END), 0) AS paperworkCheckedJobs,
-
       COALESCE(SUM(CASE WHEN supervisor_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingSupervisor,
       COALESCE(SUM(CASE WHEN supervisor_checked = 1 AND paperwork_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingPaperwork,
       COALESCE(SUM(CASE WHEN paperwork_checked = 1 AND night_manager_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingManager,
       COALESCE(SUM(CASE WHEN night_manager_checked = 1 AND lead_scheduler_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingFinal,
-
       COALESCE(SUM(CASE 
         WHEN planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
          AND planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
         THEN 1 ELSE 0 END), 0) AS monthlyTotalJobs,
-
       COALESCE(SUM(CASE 
         WHEN planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
          AND planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
          AND lead_scheduler_checked = 1
         THEN 1 ELSE 0 END), 0) AS monthlyCompleteJobs
-
     FROM jobs
+    ${whereClause}
   `;
 
   const workstreamCompletionSql = `
@@ -329,6 +341,7 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
       COALESCE(SUM(CASE WHEN jobs.night_manager_checked = 1 THEN 1 ELSE 0 END), 0) AS managerCheckedJobs
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+    ${whereClause}
     GROUP BY workstreams.name
     ORDER BY workstreams.name
   `;
@@ -342,6 +355,8 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     WHERE jobs.planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
       AND jobs.planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+      ${date ? "AND jobs.planned_date = ?" : ""}
+      ${closureId ? "AND jobs.closure_id = ?" : ""}
     GROUP BY workstreams.name
     ORDER BY workstreams.name
   `;
@@ -357,30 +372,30 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
       closures.closure_ref
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
-    WHERE jobs.planned_date IS NOT NULL
+    ${whereClause}
     ORDER BY jobs.planned_date ASC, jobs.job_number ASC
     LIMIT 5
   `;
 
-  db.query(dashboardSql, (err1, dashboardRes) => {
+  db.query(dashboardSql, params, (err1, dashboardRes) => {
     if (err1) {
       console.error("Dashboard summary error:", err1);
       return res.status(500).json({ error: "Failed to fetch dashboard data" });
     }
 
-    db.query(workstreamCompletionSql, (err2, workstreamRes) => {
+    db.query(workstreamCompletionSql, params, (err2, workstreamRes) => {
       if (err2) {
         console.error("Dashboard workstream error:", err2);
         return res.status(500).json({ error: "Failed to fetch dashboard data" });
       }
 
-      db.query(monthlyWorkstreamCompletionSql, (err3, monthlyWorkstreamRes) => {
+      db.query(monthlyWorkstreamCompletionSql, params, (err3, monthlyWorkstreamRes) => {
         if (err3) {
           console.error("Dashboard monthly workstream error:", err3);
           return res.status(500).json({ error: "Failed to fetch dashboard data" });
         }
 
-        db.query(upcomingJobsSql, (err4, upcomingJobsRes) => {
+        db.query(upcomingJobsSql, params, (err4, upcomingJobsRes) => {
           if (err4) {
             console.error("Dashboard upcoming jobs error:", err4);
             return res.status(500).json({ error: "Failed to fetch dashboard data" });
@@ -395,6 +410,11 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
           const monthlyCompleteJobs = Number(summary.monthlyCompleteJobs || 0);
 
           res.json({
+            filters: {
+              date: date || null,
+              closureId: closureId || null,
+            },
+
             summary: {
               totalJobs,
               completedJobs: Number(summary.completedJobs || 0),
