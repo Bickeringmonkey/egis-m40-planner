@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 
+const OFFLINE_QUEUE_KEY = "m40_offline_checksheet_jobs";
+
 function Checksheet() {
   const today = new Date().toISOString().split("T")[0];
 
@@ -11,9 +13,85 @@ function Checksheet() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [offlineCount, setOfflineCount] = useState(0);
+
   useEffect(() => {
     loadClosures();
+    refreshOfflineCount();
   }, []);
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOnline) {
+      syncOfflineData();
+    }
+  }, [isOnline]);
+
+  const getOfflineQueue = () => {
+    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+  };
+
+  const setOfflineQueue = (items) => {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(items));
+    setOfflineCount(items.length);
+  };
+
+  const refreshOfflineCount = () => {
+    setOfflineCount(getOfflineQueue().length);
+  };
+
+  const saveOffline = (job) => {
+    const existing = getOfflineQueue();
+    const updated = existing.filter((item) => item.id !== job.id);
+
+    updated.push({
+      id: job.id,
+      job_number: job.job_number,
+      supervisor_checked: !!job.supervisor_checked,
+      paperwork_checked: !!job.paperwork_checked,
+      completion_notes: job.completion_notes || "",
+      saved_at: new Date().toISOString(),
+    });
+
+    setOfflineQueue(updated);
+  };
+
+  const syncOfflineData = async () => {
+    const offlineJobs = getOfflineQueue();
+
+    if (!offlineJobs.length || !navigator.onLine) return;
+
+    try {
+      for (const job of offlineJobs) {
+        await api.put(`/jobs/${job.id}/supervisor-check`, {
+          supervisor_checked: !!job.supervisor_checked,
+          paperwork_checked: !!job.paperwork_checked,
+          completion_notes: job.completion_notes || "",
+        });
+      }
+
+      setOfflineQueue([]);
+      setMessage("Offline checklist data synced.");
+      if (date && closureId) loadJobs();
+    } catch (err) {
+      console.error("Offline sync failed:", err);
+      setMessage("Some offline items could not sync. They are still saved on this device.");
+      refreshOfflineCount();
+    }
+  };
 
   const loadClosures = async () => {
     try {
@@ -28,6 +106,11 @@ function Checksheet() {
   const loadJobs = async () => {
     if (!date || !closureId) {
       setMessage("Please select a date and closure.");
+      return;
+    }
+
+    if (!isOnline) {
+      setMessage("You are offline. Existing loaded checklist can still be edited and saved offline.");
       return;
     }
 
@@ -71,6 +154,12 @@ function Checksheet() {
     try {
       setMessage("");
 
+      if (!isOnline) {
+        saveOffline(job);
+        setMessage(`Saved offline: ${job.job_number}. Will sync when signal returns.`);
+        return;
+      }
+
       await api.put(`/jobs/${job.id}/supervisor-check`, {
         supervisor_checked: !!job.supervisor_checked,
         paperwork_checked: !!job.paperwork_checked,
@@ -81,7 +170,8 @@ function Checksheet() {
       loadJobs();
     } catch (err) {
       console.error(err);
-      setMessage(err.response?.data?.error || "Failed to save checklist item.");
+      saveOffline(job);
+      setMessage(`Could not reach server. Saved offline: ${job.job_number}.`);
     }
   };
 
@@ -89,6 +179,12 @@ function Checksheet() {
     try {
       setLoading(true);
       setMessage("");
+
+      if (!isOnline) {
+        jobs.forEach((job) => saveOffline(job));
+        setMessage("All checklist items saved offline. They will sync when signal returns.");
+        return;
+      }
 
       for (const job of jobs) {
         await api.put(`/jobs/${job.id}/supervisor-check`, {
@@ -102,7 +198,9 @@ function Checksheet() {
       loadJobs();
     } catch (err) {
       console.error(err);
-      setMessage(err.response?.data?.error || "Failed to save all checklist items.");
+
+      jobs.forEach((job) => saveOffline(job));
+      setMessage("Could not reach server. All items saved offline.");
     } finally {
       setLoading(false);
     }
@@ -154,6 +252,23 @@ function Checksheet() {
           <h1>Closure Checklist</h1>
           <p>Supervisor sign-off for works and paperwork.</p>
         </div>
+      </div>
+
+      <div className={`mobile-check-message ${isOnline ? "" : "offline"}`}>
+        {isOnline ? "Online" : "Offline mode"}
+        {offlineCount > 0 && (
+          <>
+            {" "}· {offlineCount} item{offlineCount !== 1 ? "s" : ""} waiting to sync
+            <button
+              type="button"
+              className="mobile-check-inline-sync"
+              onClick={syncOfflineData}
+              disabled={!isOnline}
+            >
+              Sync Now
+            </button>
+          </>
+        )}
       </div>
 
       {message && <div className="mobile-check-message">{message}</div>}
@@ -232,9 +347,7 @@ function Checksheet() {
       {loading && <p>Loading checklist...</p>}
 
       {!loading && jobs.length === 0 && (
-        <div className="mobile-check-empty">
-          No checklist loaded yet.
-        </div>
+        <div className="mobile-check-empty">No checklist loaded yet.</div>
       )}
 
       {!loading && jobs.length > 0 && (

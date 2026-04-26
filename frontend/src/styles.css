@@ -4353,3 +4353,23 @@ button:hover {
     max-width: 100%;
   }
 }
+.mobile-check-message.offline {
+  background: #fff3cd;
+  border-color: #facc15;
+  color: #7a5200;
+}
+
+.mobile-check-inline-sync {
+  margin-left: 10px;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #00617e;
+  color: white;
+  font-weight: 800;
+}
+
+.mobile-check-inline-sync:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
