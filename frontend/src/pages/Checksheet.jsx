@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 
 function Checksheet() {
@@ -18,7 +18,7 @@ function Checksheet() {
   const loadClosures = async () => {
     try {
       const res = await api.get("/closures");
-      setClosures(res.data);
+      setClosures(res.data || []);
     } catch (err) {
       console.error(err);
       setMessage("Failed to load closures.");
@@ -39,7 +39,7 @@ function Checksheet() {
         `/checksheet/jobs?date=${date}&closureId=${closureId}`
       );
 
-      setJobs(res.data);
+      setJobs(res.data || []);
     } catch (err) {
       console.error(err);
       setMessage(err.response?.data?.error || "Failed to load checklist.");
@@ -85,6 +85,29 @@ function Checksheet() {
     }
   };
 
+  const saveAll = async () => {
+    try {
+      setLoading(true);
+      setMessage("");
+
+      for (const job of jobs) {
+        await api.put(`/jobs/${job.id}/supervisor-check`, {
+          supervisor_checked: !!job.supervisor_checked,
+          paperwork_checked: !!job.paperwork_checked,
+          completion_notes: job.completion_notes || "",
+        });
+      }
+
+      setMessage("All checklist items saved.");
+      loadJobs();
+    } catch (err) {
+      console.error(err);
+      setMessage(err.response?.data?.error || "Failed to save all checklist items.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatDate = (value) => {
     if (!value) return "";
     return new Date(value).toLocaleDateString("en-GB");
@@ -94,185 +117,227 @@ function Checksheet() {
     (closure) => String(closure.id) === String(closureId)
   );
 
-  const getRowClass = (job) => {
-    if (job.lead_scheduler_checked) return "checksheet-row-complete";
-    if (job.night_manager_checked) return "checksheet-row-manager";
-    if (job.paperwork_checked) return "checksheet-row-paperwork";
-    if (job.supervisor_checked) return "checksheet-row-started";
-    return "checksheet-row-pending";
+  const progress = useMemo(() => {
+    const total = jobs.length;
+    const worksComplete = jobs.filter((job) => job.supervisor_checked).length;
+    const paperworkComplete = jobs.filter((job) => job.paperwork_checked).length;
+
+    return {
+      total,
+      worksComplete,
+      paperworkComplete,
+      worksPercent: total ? Math.round((worksComplete / total) * 100) : 0,
+      paperworkPercent: total ? Math.round((paperworkComplete / total) * 100) : 0,
+    };
+  }, [jobs]);
+
+  const getJobStatusLabel = (job) => {
+    if (job.lead_scheduler_checked) return "Final complete";
+    if (job.night_manager_checked) return "Manager checked";
+    if (job.paperwork_checked) return "Paperwork checked";
+    if (job.supervisor_checked) return "Works complete";
+    return "Pending";
+  };
+
+  const getJobStatusClass = (job) => {
+    if (job.lead_scheduler_checked) return "mobile-check-status complete";
+    if (job.night_manager_checked) return "mobile-check-status manager";
+    if (job.paperwork_checked) return "mobile-check-status paperwork";
+    if (job.supervisor_checked) return "mobile-check-status started";
+    return "mobile-check-status pending";
   };
 
   return (
-    <div className="list-page list-page-compact">
-      <div className="list-page-header list-page-header-tight">
+    <div className="mobile-check-page">
+      <div className="mobile-check-header">
         <div>
-          <h1 className="page-title">Closure Checklist</h1>
-          <p className="page-subtitle">
-            Tablet-friendly checklist for supervisors to confirm works and paperwork.
-          </p>
+          <h1>Closure Checklist</h1>
+          <p>Supervisor sign-off for works and paperwork.</p>
         </div>
       </div>
 
-      {message && <p className="form-message">{message}</p>}
+      {message && <div className="mobile-check-message">{message}</div>}
 
-      <div className="filter-card filter-card-compact">
-        <div className="filter-grid-compact">
-          <div className="form-group">
-            <label>Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Closure</label>
-            <select
-              value={closureId}
-              onChange={(e) => setClosureId(e.target.value)}
-            >
-              <option value="">Select closure</option>
-              {closures.map((closure) => (
-                <option key={closure.id} value={closure.id}>
-                  {closure.closure_ref}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="filter-actions-inline">
-            <button
-              type="button"
-              className="detail-btn detail-btn-secondary"
-              onClick={loadJobs}
-            >
-              Load Checklist
-            </button>
-          </div>
+      <div className="mobile-check-filters">
+        <div className="mobile-check-field">
+          <label>Date</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
         </div>
+
+        <div className="mobile-check-field">
+          <label>Closure</label>
+          <select
+            value={closureId}
+            onChange={(e) => setClosureId(e.target.value)}
+          >
+            <option value="">Select closure</option>
+            {closures.map((closure) => (
+              <option key={closure.id} value={closure.id}>
+                {closure.closure_ref}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          className="mobile-check-primary-btn"
+          onClick={loadJobs}
+        >
+          Load Checklist
+        </button>
       </div>
 
       {selectedClosure && (
-        <div className="detail-card" style={{ marginBottom: "16px" }}>
-          <h2 style={{ marginTop: 0 }}>{selectedClosure.closure_ref}</h2>
+        <div className="mobile-check-closure-card">
+          <h2>{selectedClosure.closure_ref}</h2>
           <p>
-            <strong>Date:</strong> {formatDate(date)} &nbsp; | &nbsp;
-            <strong>Carriageway:</strong>{" "}
-            {selectedClosure.carriageway || "N/A"} &nbsp; | &nbsp;
-            <strong>Junctions:</strong>{" "}
+            {formatDate(date)} · {selectedClosure.carriageway || "N/A"} ·{" "}
             {selectedClosure.junctions_between || "N/A"}
           </p>
+        </div>
+      )}
+
+      {jobs.length > 0 && (
+        <div className="mobile-check-progress">
+          <div>
+            <span>Works</span>
+            <strong>
+              {progress.worksComplete}/{progress.total} ({progress.worksPercent}%)
+            </strong>
+          </div>
+
+          <div>
+            <span>Paperwork</span>
+            <strong>
+              {progress.paperworkComplete}/{progress.total} ({progress.paperworkPercent}%)
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            className="mobile-check-save-all-btn"
+            onClick={saveAll}
+            disabled={loading}
+          >
+            Save All
+          </button>
         </div>
       )}
 
       {loading && <p>Loading checklist...</p>}
 
       {!loading && jobs.length === 0 && (
-        <div className="detail-card">
-          <p>No checklist loaded yet.</p>
+        <div className="mobile-check-empty">
+          No checklist loaded yet.
         </div>
       )}
 
       {!loading && jobs.length > 0 && (
-        <div className="list-table-card">
-          <div className="list-table-header">
-            <h2>Checklist Items</h2>
-            <span>{jobs.length} jobs</span>
-          </div>
+        <div className="mobile-check-list">
+          {jobs.map((job) => (
+            <div key={job.id} className="mobile-check-card">
+              <div className="mobile-check-card-top">
+                <div>
+                  <h2>{job.job_number}</h2>
+                  <p>{job.work_order || "No work order"}</p>
+                </div>
 
-          <div className="table-wrapper">
-            <table className="enhanced-table">
-              <thead>
-                <tr>
-                  <th>Job</th>
-                  <th>Workstream</th>
-                  <th>Activity</th>
-                  <th>Location</th>
-                  <th>Works Complete</th>
-                  <th>Paperwork</th>
-                  <th>Manager</th>
-                  <th>Final</th>
-                  <th>Notes</th>
-                  <th>Save</th>
-                </tr>
-              </thead>
+                <span className={getJobStatusClass(job)}>
+                  {getJobStatusLabel(job)}
+                </span>
+              </div>
 
-              <tbody>
-                {jobs.map((job) => (
-                  <tr key={job.id} className={getRowClass(job)}>
-                    <td>
-                      <strong>{job.job_number}</strong>
-                      <br />
-                      <small>{job.work_order || ""}</small>
-                    </td>
+              <div className="mobile-check-details">
+                <div>
+                  <span>Workstream</span>
+                  <strong>{job.workstream || "N/A"}</strong>
+                </div>
 
-                    <td>{job.workstream || ""}</td>
-                    <td>{job.activity || job.title || ""}</td>
-                    <td>{job.location || ""}</td>
+                <div>
+                  <span>Activity</span>
+                  <strong>{job.activity || job.title || "N/A"}</strong>
+                </div>
 
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={!!job.supervisor_checked}
-                        onChange={(e) =>
-                          updateLocalJob(
-                            job.id,
-                            "supervisor_checked",
-                            e.target.checked ? 1 : 0
-                          )
-                        }
-                      />
-                    </td>
+                <div>
+                  <span>Location</span>
+                  <strong>{job.location || "N/A"}</strong>
+                </div>
+              </div>
 
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={!!job.paperwork_checked}
-                        disabled={!job.supervisor_checked}
-                        title={
-                          !job.supervisor_checked
-                            ? "Mark works complete first"
-                            : ""
-                        }
-                        onChange={(e) =>
-                          updateLocalJob(
-                            job.id,
-                            "paperwork_checked",
-                            e.target.checked ? 1 : 0
-                          )
-                        }
-                      />
-                    </td>
+              <div className="mobile-check-toggles">
+                <label className="mobile-check-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!job.supervisor_checked}
+                    onChange={(e) =>
+                      updateLocalJob(
+                        job.id,
+                        "supervisor_checked",
+                        e.target.checked ? 1 : 0
+                      )
+                    }
+                  />
+                  <span>Works Complete</span>
+                </label>
 
-                    <td>{job.night_manager_checked ? "Yes" : "No"}</td>
-                    <td>{job.lead_scheduler_checked ? "Yes" : "No"}</td>
+                <label
+                  className={`mobile-check-toggle ${
+                    !job.supervisor_checked ? "disabled" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!job.paperwork_checked}
+                    disabled={!job.supervisor_checked}
+                    onChange={(e) =>
+                      updateLocalJob(
+                        job.id,
+                        "paperwork_checked",
+                        e.target.checked ? 1 : 0
+                      )
+                    }
+                  />
+                  <span>Paperwork Checked</span>
+                </label>
+              </div>
 
-                    <td>
-                      <input
-                        type="text"
-                        value={job.completion_notes || ""}
-                        onChange={(e) =>
-                          updateLocalJob(
-                            job.id,
-                            "completion_notes",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Add notes"
-                      />
-                    </td>
+              <div className="mobile-check-review-row">
+                <div>
+                  <span>Manager</span>
+                  <strong>{job.night_manager_checked ? "Yes" : "No"}</strong>
+                </div>
 
-                    <td>
-                      <button type="button" onClick={() => saveSupervisorCheck(job)}>
-                        Save
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                <div>
+                  <span>Final</span>
+                  <strong>{job.lead_scheduler_checked ? "Yes" : "No"}</strong>
+                </div>
+              </div>
+
+              <div className="mobile-check-notes">
+                <label>Notes</label>
+                <textarea
+                  value={job.completion_notes || ""}
+                  onChange={(e) =>
+                    updateLocalJob(job.id, "completion_notes", e.target.value)
+                  }
+                  placeholder="Add notes, issues, missing paperwork, photos required..."
+                />
+              </div>
+
+              <button
+                type="button"
+                className="mobile-check-save-btn"
+                onClick={() => saveSupervisorCheck(job)}
+              >
+                Save Item
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
