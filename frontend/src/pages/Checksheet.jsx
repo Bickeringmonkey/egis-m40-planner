@@ -16,6 +16,9 @@ function Checksheet() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [offlineCount, setOfflineCount] = useState(0);
 
+  // -----------------------------
+  // INIT
+  // -----------------------------
   useEffect(() => {
     loadClosures();
     refreshOfflineCount();
@@ -40,9 +43,11 @@ function Checksheet() {
     }
   }, [isOnline]);
 
-  const getOfflineQueue = () => {
-    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-  };
+  // -----------------------------
+  // OFFLINE STORAGE
+  // -----------------------------
+  const getOfflineQueue = () =>
+    JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
 
   const setOfflineQueue = (items) => {
     localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(items));
@@ -55,6 +60,7 @@ function Checksheet() {
 
   const saveOffline = (job) => {
     const existing = getOfflineQueue();
+
     const updated = existing.filter((item) => item.id !== job.id);
 
     updated.push({
@@ -77,40 +83,42 @@ function Checksheet() {
     try {
       for (const job of offlineJobs) {
         await api.put(`/jobs/${job.id}/supervisor-check`, {
-          supervisor_checked: !!job.supervisor_checked,
-          paperwork_checked: !!job.paperwork_checked,
-          completion_notes: job.completion_notes || "",
+          supervisor_checked: job.supervisor_checked,
+          paperwork_checked: job.paperwork_checked,
+          completion_notes: job.completion_notes,
         });
       }
 
       setOfflineQueue([]);
-      setMessage("Offline checklist data synced.");
+      setMessage("Offline data synced successfully.");
+
       if (date && closureId) loadJobs();
     } catch (err) {
-      console.error("Offline sync failed:", err);
-      setMessage("Some offline items could not sync. They are still saved on this device.");
-      refreshOfflineCount();
+      console.error(err);
+      setMessage("Sync failed. Data still saved on device.");
     }
   };
 
+  // -----------------------------
+  // DATA LOAD
+  // -----------------------------
   const loadClosures = async () => {
     try {
       const res = await api.get("/closures");
       setClosures(res.data || []);
-    } catch (err) {
-      console.error(err);
+    } catch {
       setMessage("Failed to load closures.");
     }
   };
 
   const loadJobs = async () => {
     if (!date || !closureId) {
-      setMessage("Please select a date and closure.");
+      setMessage("Select date and closure.");
       return;
     }
 
-    if (!isOnline) {
-      setMessage("You are offline. Existing loaded checklist can still be edited and saved offline.");
+    if (!navigator.onLine) {
+      setMessage("Offline — cannot load new checklist.");
       return;
     }
 
@@ -123,23 +131,22 @@ function Checksheet() {
       );
 
       setJobs(res.data || []);
-    } catch (err) {
-      console.error(err);
-      setMessage(err.response?.data?.error || "Failed to load checklist.");
+    } catch {
+      setMessage("Failed to load checklist.");
     } finally {
       setLoading(false);
     }
   };
 
+  // -----------------------------
+  // UPDATE JOB LOCALLY
+  // -----------------------------
   const updateLocalJob = (jobId, field, value) => {
     setJobs((prev) =>
       prev.map((job) => {
         if (job.id !== jobId) return job;
 
-        const updated = {
-          ...job,
-          [field]: value,
-        };
+        const updated = { ...job, [field]: value };
 
         if (field === "supervisor_checked" && !value) {
           updated.paperwork_checked = 0;
@@ -150,41 +157,49 @@ function Checksheet() {
     );
   };
 
+  // -----------------------------
+  // SAVE SINGLE
+  // -----------------------------
   const saveSupervisorCheck = async (job) => {
+    const online = navigator.onLine;
+
+    if (!online) {
+      saveOffline(job);
+      setIsOnline(false);
+      setMessage(`Saved offline: ${job.job_number}`);
+      return;
+    }
+
     try {
-      setMessage("");
-
-      if (!isOnline) {
-        saveOffline(job);
-        setMessage(`Saved offline: ${job.job_number}. Will sync when signal returns.`);
-        return;
-      }
-
       await api.put(`/jobs/${job.id}/supervisor-check`, {
         supervisor_checked: !!job.supervisor_checked,
         paperwork_checked: !!job.paperwork_checked,
         completion_notes: job.completion_notes || "",
       });
 
-      setMessage(`Saved ${job.job_number}.`);
+      setMessage(`Saved ${job.job_number}`);
       loadJobs();
-    } catch (err) {
-      console.error(err);
+    } catch {
       saveOffline(job);
-      setMessage(`Could not reach server. Saved offline: ${job.job_number}.`);
+      setMessage(`No signal — saved offline: ${job.job_number}`);
     }
   };
 
+  // -----------------------------
+  // SAVE ALL
+  // -----------------------------
   const saveAll = async () => {
+    const online = navigator.onLine;
+
+    if (!online) {
+      jobs.forEach(saveOffline);
+      setIsOnline(false);
+      setMessage("All items saved offline.");
+      return;
+    }
+
     try {
       setLoading(true);
-      setMessage("");
-
-      if (!isOnline) {
-        jobs.forEach((job) => saveOffline(job));
-        setMessage("All checklist items saved offline. They will sync when signal returns.");
-        return;
-      }
 
       for (const job of jobs) {
         await api.put(`/jobs/${job.id}/supervisor-check`, {
@@ -194,265 +209,118 @@ function Checksheet() {
         });
       }
 
-      setMessage("All checklist items saved.");
+      setMessage("All items saved.");
       loadJobs();
-    } catch (err) {
-      console.error(err);
-
-      jobs.forEach((job) => saveOffline(job));
-      setMessage("Could not reach server. All items saved offline.");
+    } catch {
+      jobs.forEach(saveOffline);
+      setMessage("Connection lost — saved offline.");
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (value) => {
-    if (!value) return "";
-    return new Date(value).toLocaleDateString("en-GB");
-  };
-
+  // -----------------------------
+  // UI HELPERS
+  // -----------------------------
   const selectedClosure = closures.find(
-    (closure) => String(closure.id) === String(closureId)
+    (c) => String(c.id) === String(closureId)
   );
 
   const progress = useMemo(() => {
     const total = jobs.length;
-    const worksComplete = jobs.filter((job) => job.supervisor_checked).length;
-    const paperworkComplete = jobs.filter((job) => job.paperwork_checked).length;
+    const works = jobs.filter((j) => j.supervisor_checked).length;
+    const paperwork = jobs.filter((j) => j.paperwork_checked).length;
 
     return {
       total,
-      worksComplete,
-      paperworkComplete,
-      worksPercent: total ? Math.round((worksComplete / total) * 100) : 0,
-      paperworkPercent: total ? Math.round((paperworkComplete / total) * 100) : 0,
+      works,
+      paperwork,
+      worksPct: total ? Math.round((works / total) * 100) : 0,
+      paperworkPct: total ? Math.round((paperwork / total) * 100) : 0,
     };
   }, [jobs]);
 
-  const getJobStatusLabel = (job) => {
-    if (job.lead_scheduler_checked) return "Final complete";
-    if (job.night_manager_checked) return "Manager checked";
-    if (job.paperwork_checked) return "Paperwork checked";
-    if (job.supervisor_checked) return "Works complete";
-    return "Pending";
-  };
-
-  const getJobStatusClass = (job) => {
-    if (job.lead_scheduler_checked) return "mobile-check-status complete";
-    if (job.night_manager_checked) return "mobile-check-status manager";
-    if (job.paperwork_checked) return "mobile-check-status paperwork";
-    if (job.supervisor_checked) return "mobile-check-status started";
-    return "mobile-check-status pending";
-  };
-
+  // -----------------------------
+  // RENDER
+  // -----------------------------
   return (
     <div className="mobile-check-page">
-      <div className="mobile-check-header">
-        <div>
-          <h1>Closure Checklist</h1>
-          <p>Supervisor sign-off for works and paperwork.</p>
-        </div>
-      </div>
+      <h1>Closure Checklist</h1>
 
       <div className={`mobile-check-message ${isOnline ? "" : "offline"}`}>
-        {isOnline ? "Online" : "Offline mode"}
-        {offlineCount > 0 && (
-          <>
-            {" "}· {offlineCount} item{offlineCount !== 1 ? "s" : ""} waiting to sync
-            <button
-              type="button"
-              className="mobile-check-inline-sync"
-              onClick={syncOfflineData}
-              disabled={!isOnline}
-            >
-              Sync Now
-            </button>
-          </>
-        )}
+        {isOnline ? "Online" : "Offline"}
+        {offlineCount > 0 && ` · ${offlineCount} pending`}
       </div>
 
       {message && <div className="mobile-check-message">{message}</div>}
 
-      <div className="mobile-check-filters">
-        <div className="mobile-check-field">
-          <label>Date</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
+      <div>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-        <div className="mobile-check-field">
-          <label>Closure</label>
-          <select
-            value={closureId}
-            onChange={(e) => setClosureId(e.target.value)}
-          >
-            <option value="">Select closure</option>
-            {closures.map((closure) => (
-              <option key={closure.id} value={closure.id}>
-                {closure.closure_ref}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select value={closureId} onChange={(e) => setClosureId(e.target.value)}>
+          <option value="">Select closure</option>
+          {closures.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.closure_ref}
+            </option>
+          ))}
+        </select>
 
-        <button
-          type="button"
-          className="mobile-check-primary-btn"
-          onClick={loadJobs}
-        >
-          Load Checklist
-        </button>
+        <button onClick={loadJobs}>Load</button>
       </div>
 
-      {selectedClosure && (
-        <div className="mobile-check-closure-card">
-          <h2>{selectedClosure.closure_ref}</h2>
-          <p>
-            {formatDate(date)} · {selectedClosure.carriageway || "N/A"} ·{" "}
-            {selectedClosure.junctions_between || "N/A"}
-          </p>
-        </div>
-      )}
+      {selectedClosure && <h2>{selectedClosure.closure_ref}</h2>}
 
       {jobs.length > 0 && (
-        <div className="mobile-check-progress">
-          <div>
-            <span>Works</span>
-            <strong>
-              {progress.worksComplete}/{progress.total} ({progress.worksPercent}%)
-            </strong>
-          </div>
+        <div>
+          <p>
+            Works: {progress.works}/{progress.total} ({progress.worksPct}%)
+          </p>
+          <p>
+            Paperwork: {progress.paperwork}/{progress.total} ({progress.paperworkPct}%)
+          </p>
 
-          <div>
-            <span>Paperwork</span>
-            <strong>
-              {progress.paperworkComplete}/{progress.total} ({progress.paperworkPercent}%)
-            </strong>
-          </div>
-
-          <button
-            type="button"
-            className="mobile-check-save-all-btn"
-            onClick={saveAll}
-            disabled={loading}
-          >
-            Save All
-          </button>
+          <button onClick={saveAll}>Save All</button>
         </div>
       )}
 
-      {loading && <p>Loading checklist...</p>}
+      {jobs.map((job) => (
+        <div key={job.id}>
+          <h3>{job.job_number}</h3>
 
-      {!loading && jobs.length === 0 && (
-        <div className="mobile-check-empty">No checklist loaded yet.</div>
-      )}
+          <label>
+            <input
+              type="checkbox"
+              checked={!!job.supervisor_checked}
+              onChange={(e) =>
+                updateLocalJob(job.id, "supervisor_checked", e.target.checked)
+              }
+            />
+            Works Complete
+          </label>
 
-      {!loading && jobs.length > 0 && (
-        <div className="mobile-check-list">
-          {jobs.map((job) => (
-            <div key={job.id} className="mobile-check-card">
-              <div className="mobile-check-card-top">
-                <div>
-                  <h2>{job.job_number}</h2>
-                  <p>{job.work_order || "No work order"}</p>
-                </div>
+          <label>
+            <input
+              type="checkbox"
+              checked={!!job.paperwork_checked}
+              disabled={!job.supervisor_checked}
+              onChange={(e) =>
+                updateLocalJob(job.id, "paperwork_checked", e.target.checked)
+              }
+            />
+            Paperwork
+          </label>
 
-                <span className={getJobStatusClass(job)}>
-                  {getJobStatusLabel(job)}
-                </span>
-              </div>
+          <textarea
+            value={job.completion_notes || ""}
+            onChange={(e) =>
+              updateLocalJob(job.id, "completion_notes", e.target.value)
+            }
+          />
 
-              <div className="mobile-check-details">
-                <div>
-                  <span>Workstream</span>
-                  <strong>{job.workstream || "N/A"}</strong>
-                </div>
-
-                <div>
-                  <span>Activity</span>
-                  <strong>{job.activity || job.title || "N/A"}</strong>
-                </div>
-
-                <div>
-                  <span>Location</span>
-                  <strong>{job.location || "N/A"}</strong>
-                </div>
-              </div>
-
-              <div className="mobile-check-toggles">
-                <label className="mobile-check-toggle">
-                  <input
-                    type="checkbox"
-                    checked={!!job.supervisor_checked}
-                    onChange={(e) =>
-                      updateLocalJob(
-                        job.id,
-                        "supervisor_checked",
-                        e.target.checked ? 1 : 0
-                      )
-                    }
-                  />
-                  <span>Works Complete</span>
-                </label>
-
-                <label
-                  className={`mobile-check-toggle ${
-                    !job.supervisor_checked ? "disabled" : ""
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!job.paperwork_checked}
-                    disabled={!job.supervisor_checked}
-                    onChange={(e) =>
-                      updateLocalJob(
-                        job.id,
-                        "paperwork_checked",
-                        e.target.checked ? 1 : 0
-                      )
-                    }
-                  />
-                  <span>Paperwork Checked</span>
-                </label>
-              </div>
-
-              <div className="mobile-check-review-row">
-                <div>
-                  <span>Manager</span>
-                  <strong>{job.night_manager_checked ? "Yes" : "No"}</strong>
-                </div>
-
-                <div>
-                  <span>Final</span>
-                  <strong>{job.lead_scheduler_checked ? "Yes" : "No"}</strong>
-                </div>
-              </div>
-
-              <div className="mobile-check-notes">
-                <label>Notes</label>
-                <textarea
-                  value={job.completion_notes || ""}
-                  onChange={(e) =>
-                    updateLocalJob(job.id, "completion_notes", e.target.value)
-                  }
-                  placeholder="Add notes, issues, missing paperwork, photos required..."
-                />
-              </div>
-
-              <button
-                type="button"
-                className="mobile-check-save-btn"
-                onClick={() => saveSupervisorCheck(job)}
-              >
-                Save Item
-              </button>
-            </div>
-          ))}
+          <button onClick={() => saveSupervisorCheck(job)}>Save</button>
         </div>
-      )}
+      ))}
     </div>
   );
 }
