@@ -3935,3 +3935,35 @@ button:hover {
     max-width: 400px;
   }
 }
+.checksheet-row-pending {
+  background: #fff;
+}
+
+.checksheet-row-started {
+  background: #fff7e6;
+}
+
+.checksheet-row-paperwork {
+  background: #e6f4ff;
+}
+
+.checksheet-row-manager {
+  background: #f0f5ff;
+}
+
+.checksheet-row-complete {
+  background: #e6ffed;
+  font-weight: 500;
+}
+.sidebar-group {
+  margin-bottom: 18px;
+}
+
+.sidebar-group-title {
+  padding: 8px 18px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+}

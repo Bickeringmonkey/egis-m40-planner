@@ -42,13 +42,11 @@ function Closures() {
     return new Date(dateString).toISOString().split("T")[0];
   };
 
-  const getClosureStartDate = (closure) => {
-    return closure.start_date || closure.closure_date || "";
-  };
+  const getClosureStartDate = (closure) =>
+    closure.start_date || closure.closure_date || "";
 
-  const getClosureEndDate = (closure) => {
-    return closure.end_date || closure.start_date || closure.closure_date || "";
-  };
+  const getClosureEndDate = (closure) =>
+    closure.end_date || closure.start_date || closure.closure_date || "";
 
   const formatClosureDateRange = (closure) => {
     const start = getClosureStartDate(closure);
@@ -141,6 +139,12 @@ function Closures() {
         </div>
 
         <div className="list-page-stats">
+          <Link to="/add-closure">
+            <button type="button" className="detail-btn">
+              Add Closure
+            </button>
+          </Link>
+
           <div className="mini-stat">
             <span className="mini-stat-label">Total</span>
             <span className="mini-stat-value">{closures.length}</span>

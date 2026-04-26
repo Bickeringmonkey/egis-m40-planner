@@ -73,12 +73,9 @@ function Jobs() {
     const searchText = filters.search.trim().toLowerCase();
 
     return jobs.filter((job) => {
-      const matchesStatus =
-        !filters.status || job.status === filters.status;
-
+      const matchesStatus = !filters.status || job.status === filters.status;
       const matchesWorkstream =
         !filters.workstream || job.workstream === filters.workstream;
-
       const matchesDate =
         !filters.date || normaliseDate(job.planned_date) === filters.date;
 
@@ -113,10 +110,17 @@ function Jobs() {
         </div>
 
         <div className="list-page-stats">
+          <Link to="/add-job">
+            <button type="button" className="detail-btn">
+              Add Job
+            </button>
+          </Link>
+
           <div className="mini-stat">
             <span className="mini-stat-label">Total</span>
             <span className="mini-stat-value">{jobs.length}</span>
           </div>
+
           <div className="mini-stat">
             <span className="mini-stat-label">Showing</span>
             <span className="mini-stat-value">{filteredJobs.length}</span>
@@ -217,6 +221,7 @@ function Jobs() {
                   <th>Status</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filteredJobs.length > 0 ? (
                   filteredJobs.map((job) => (
@@ -229,9 +234,11 @@ function Jobs() {
                           {job.job_number}
                         </Link>
                       </td>
+
                       <td>{job.work_order || ""}</td>
                       <td>{job.activity || job.title || ""}</td>
                       <td>{job.location || ""}</td>
+
                       <td>
                         {job.closure_ref ? (
                           <Link to={`/closures/${job.closure_id}`}>
@@ -241,7 +248,9 @@ function Jobs() {
                           ""
                         )}
                       </td>
+
                       <td>{formatDate(job.planned_date)}</td>
+
                       <td>
                         <span className={getStatusClass(job.status)}>
                           {job.status}

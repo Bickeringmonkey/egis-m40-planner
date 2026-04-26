@@ -4,12 +4,9 @@ import {
   TrafficCone,
   BriefcaseBusiness,
   MoonStar,
-  FilePlus2,
-  ClipboardPlus,
   Users,
   LogOut,
   ClipboardList,
-  ClipboardCheck,
   ShieldCheck,
   CheckCircle2,
 } from "lucide-react";
@@ -29,7 +26,6 @@ import NightWorksPrint from "./pages/NightWorksPrint";
 import Login from "./pages/Login";
 import AdminUsers from "./pages/AdminUsers";
 import WorkSheet from "./pages/WorkSheet";
-import SupervisorCheckSheet from "./pages/SupervisorCheckSheet";
 import NightManagerReview from "./pages/NightManagerReview";
 import LeadSchedulerReview from "./pages/LeadSchedulerReview";
 import Checksheet from "./pages/Checksheet";
@@ -42,132 +38,137 @@ import egisLogo from "../src/assets/e-logo.svg";
 function AppShell() {
   const { user, logout } = useAuth();
 
-  const navItems = [
+  const navGroups = [
     {
-      to: "/",
-      label: "Dashboard",
-      icon: LayoutDashboard,
-      roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
+      title: "Main",
+      items: [
+        {
+          to: "/",
+          label: "Dashboard",
+          icon: LayoutDashboard,
+          roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
+        },
+      ],
     },
     {
-      to: "/closures",
-      label: "Closures",
-      icon: TrafficCone,
-      roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
+      title: "Planning",
+      items: [
+        {
+          to: "/closures",
+          label: "Closures",
+          icon: TrafficCone,
+          roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
+        },
+        {
+          to: "/jobs",
+          label: "Jobs",
+          icon: BriefcaseBusiness,
+          roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
+        },
+        {
+          to: "/nightworks",
+          label: "Night Works",
+          icon: MoonStar,
+          roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
+        },
+        {
+          to: "/work-sheet",
+          label: "Work Sheet",
+          icon: ClipboardList,
+          roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
+        },
+      ],
     },
     {
-      to: "/jobs",
-      label: "Jobs",
-      icon: BriefcaseBusiness,
-      roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
+      title: "Completion",
+      items: [
+        {
+          to: "/checksheet",
+          label: "Checklist",
+          icon: ClipboardList,
+          roles: ["admin", "supervisor"],
+        },
+        {
+          to: "/night-manager-review",
+          label: "Manager Review",
+          icon: ShieldCheck,
+          roles: ["admin", "night_manager"],
+        },
+        {
+          to: "/lead-scheduler-review",
+          label: "Final Completion",
+          icon: CheckCircle2,
+          roles: ["admin", "lead_scheduler"],
+        },
+      ],
     },
     {
-      to: "/nightworks",
-      label: "Night Works",
-      icon: MoonStar,
-      roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
-    },
-    {
-      to: "/supervisor-checksheet",
-      label: "Supervisor Checks",
-      icon: ClipboardCheck,
-      roles: ["admin", "supervisor"],
-    },
-    {
-      to: "/checksheet",
-      label: "Checklist",
-      icon: ClipboardList,
-      roles: ["admin", "supervisor"],
-    },
-    {
-      to: "/night-manager-review",
-      label: "Manager Review",
-      icon: ShieldCheck,
-      roles: ["admin", "night_manager"],
-    },
-    {
-      to: "/lead-scheduler-review",
-      label: "Final Completion",
-      icon: CheckCircle2,
-      roles: ["admin", "lead_scheduler"],
-    },
-    {
-      to: "/add-closure",
-      label: "Add Closure",
-      icon: FilePlus2,
-      roles: ["admin", "planner"],
-    },
-    {
-      to: "/add-job",
-      label: "Add Job",
-      icon: ClipboardPlus,
-      roles: ["admin", "planner"],
-    },
-    {
-      to: "/work-sheet",
-      label: "Work Sheet",
-      icon: ClipboardList,
-      roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
-    },
-    {
-      to: "/admin/users",
-      label: "Users",
-      icon: Users,
-      roles: ["admin"],
+      title: "Admin",
+      items: [
+        {
+          to: "/admin/users",
+          label: "Users",
+          icon: Users,
+          roles: ["admin"],
+        },
+      ],
     },
   ];
 
-  const allowedNavItems = navItems.filter((item) =>
-    item.roles.includes(user?.role)
-  );
+  const allowedNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.roles.includes(user?.role)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div className="app-shell">
       <aside className="sidebar-modern">
         <div className="sidebar-brand">
           <div className="sidebar-brand-mark">
-            <img
-              src={egisLogo}
-              alt="Egis Logo"
-              className="worksheet-logo-img"
-            />
+            <img src={egisLogo} alt="Egis Logo" className="worksheet-logo-img" />
           </div>
 
           <div className="sidebar-brand-text">
             <div className="sidebar-brand-title">M40 Planner</div>
             <div className="sidebar-brand-subtitle">
-              {user?.role ? `${user.role}` : "Road Operations"}
+              {user?.role ? user.role : "Road Operations"}
             </div>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          {allowedNavItems.map((item) => {
-            const Icon = item.icon;
+          {allowedNavGroups.map((group) => (
+            <div key={group.title} className="sidebar-group">
+              <div className="sidebar-group-title">{group.title}</div>
 
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/"}
-                className={({ isActive }) =>
-                  `sidebar-link ${isActive ? "active" : ""}`
-                }
-              >
-                <span className="sidebar-link-icon">
-                  <Icon size={18} strokeWidth={2.2} />
-                </span>
-                <span className="sidebar-link-label">{item.label}</span>
-              </NavLink>
-            );
-          })}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/"}
+                    className={({ isActive }) =>
+                      `sidebar-link ${isActive ? "active" : ""}`
+                    }
+                  >
+                    <span className="sidebar-link-icon">
+                      <Icon size={18} strokeWidth={2.2} />
+                    </span>
+                    <span className="sidebar-link-label">{item.label}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
           <div className="sidebar-footer-card">
-            <div className="sidebar-footer-title">
-              {user?.name || "Signed in"}
-            </div>
+            <div className="sidebar-footer-title">{user?.name || "Signed in"}</div>
             <div className="sidebar-footer-text">{user?.email || ""}</div>
 
             <button
@@ -176,13 +177,7 @@ function AppShell() {
               className="sidebar-logout-btn"
               style={{ marginTop: "12px", width: "100%" }}
             >
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
                 <LogOut size={16} />
                 Sign Out
               </span>
@@ -310,14 +305,6 @@ function AppShell() {
             }
           />
 
-          <Route
-            path="/supervisor-checksheet"
-            element={
-              <ProtectedRoute roles={["admin", "supervisor"]}>
-                <SupervisorCheckSheet />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/checksheet"
             element={
