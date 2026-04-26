@@ -289,40 +289,61 @@ app.get("/api/workstreams", auth, (req, res) => {
 });
 
 app.get("/api/dashboard/overview", auth, (req, res) => {
-  const totalJobsSql = `SELECT COUNT(*) AS totalJobs FROM jobs`;
-
-  const completedJobsSql = `
-    SELECT COUNT(*) AS completedJobs
-    FROM jobs
-    WHERE LOWER(status) = 'complete'
-  `;
-
-  const plannedJobsSql = `
-    SELECT COUNT(*) AS plannedJobs
-    FROM jobs
-    WHERE LOWER(status) = 'planned'
-  `;
-
-  const cancelledJobsSql = `
-    SELECT COUNT(*) AS cancelledJobs
-    FROM jobs
-    WHERE LOWER(status) = 'cancelled'
-  `;
-
-  const jobsByStatusSql = `
-    SELECT status, COUNT(*) AS count
-    FROM jobs
-    GROUP BY status
-  `;
-
-  const jobsByWorkstreamSql = `
+  const dashboardSql = `
     SELECT
-      workstreams.name AS workstream,
-      COUNT(*) AS count
+      COUNT(*) AS totalJobs,
+
+      COALESCE(SUM(CASE WHEN LOWER(status) = 'complete' THEN 1 ELSE 0 END), 0) AS completedJobs,
+      COALESCE(SUM(CASE WHEN LOWER(status) = 'planned' THEN 1 ELSE 0 END), 0) AS plannedJobs,
+      COALESCE(SUM(CASE WHEN LOWER(status) = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelledJobs,
+
+      COALESCE(SUM(CASE WHEN lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS finalCompleteJobs,
+      COALESCE(SUM(CASE WHEN paperwork_checked = 1 THEN 1 ELSE 0 END), 0) AS paperworkCheckedJobs,
+
+      COALESCE(SUM(CASE WHEN supervisor_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingSupervisor,
+      COALESCE(SUM(CASE WHEN supervisor_checked = 1 AND paperwork_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingPaperwork,
+      COALESCE(SUM(CASE WHEN paperwork_checked = 1 AND night_manager_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingManager,
+      COALESCE(SUM(CASE WHEN night_manager_checked = 1 AND lead_scheduler_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingFinal,
+
+      COALESCE(SUM(CASE 
+        WHEN planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+        THEN 1 ELSE 0 END), 0) AS monthlyTotalJobs,
+
+      COALESCE(SUM(CASE 
+        WHEN planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+         AND planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+         AND lead_scheduler_checked = 1
+        THEN 1 ELSE 0 END), 0) AS monthlyCompleteJobs
+
+    FROM jobs
+  `;
+
+  const workstreamCompletionSql = `
+    SELECT
+      COALESCE(workstreams.name, 'Unknown') AS workstream,
+      COUNT(jobs.id) AS totalJobs,
+      COALESCE(SUM(CASE WHEN jobs.lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS completeJobs,
+      COALESCE(SUM(CASE WHEN jobs.paperwork_checked = 1 THEN 1 ELSE 0 END), 0) AS paperworkCheckedJobs,
+      COALESCE(SUM(CASE WHEN jobs.supervisor_checked = 1 THEN 1 ELSE 0 END), 0) AS supervisorCheckedJobs,
+      COALESCE(SUM(CASE WHEN jobs.night_manager_checked = 1 THEN 1 ELSE 0 END), 0) AS managerCheckedJobs
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     GROUP BY workstreams.name
-    ORDER BY count DESC
+    ORDER BY workstreams.name
+  `;
+
+  const monthlyWorkstreamCompletionSql = `
+    SELECT
+      COALESCE(workstreams.name, 'Unknown') AS workstream,
+      COUNT(jobs.id) AS totalJobs,
+      COALESCE(SUM(CASE WHEN jobs.lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS completeJobs
+    FROM jobs
+    LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+    WHERE jobs.planned_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+      AND jobs.planned_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+    GROUP BY workstreams.name
+    ORDER BY workstreams.name
   `;
 
   const upcomingJobsSql = `
@@ -341,92 +362,112 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
     LIMIT 5
   `;
 
-  const recentClosuresSql = `
-    SELECT
-      id,
-      closure_ref,
-      closure_date,
-      start_date,
-      end_date,
-      carriageway,
-      closure_type,
-      status
-    FROM closures
-    ORDER BY COALESCE(start_date, closure_date) DESC, id DESC
-    LIMIT 5
-  `;
+  db.query(dashboardSql, (err1, dashboardRes) => {
+    if (err1) {
+      console.error("Dashboard summary error:", err1);
+      return res.status(500).json({ error: "Failed to fetch dashboard data" });
+    }
 
-  const completionWorkflowSql = `
-    SELECT
-      COUNT(*) AS total,
-      COALESCE(SUM(CASE WHEN supervisor_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingSupervisor,
-      COALESCE(SUM(CASE WHEN supervisor_checked = 1 AND paperwork_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingPaperwork,
-      COALESCE(SUM(CASE WHEN paperwork_checked = 1 AND night_manager_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingManager,
-      COALESCE(SUM(CASE WHEN night_manager_checked = 1 AND lead_scheduler_checked = 0 THEN 1 ELSE 0 END), 0) AS awaitingFinal,
-      COALESCE(SUM(CASE WHEN lead_scheduler_checked = 1 THEN 1 ELSE 0 END), 0) AS complete
-    FROM jobs
-  `;
+    db.query(workstreamCompletionSql, (err2, workstreamRes) => {
+      if (err2) {
+        console.error("Dashboard workstream error:", err2);
+        return res.status(500).json({ error: "Failed to fetch dashboard data" });
+      }
 
-  db.query(totalJobsSql, (err1, totalJobsRes) => {
-    if (err1) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+      db.query(monthlyWorkstreamCompletionSql, (err3, monthlyWorkstreamRes) => {
+        if (err3) {
+          console.error("Dashboard monthly workstream error:", err3);
+          return res.status(500).json({ error: "Failed to fetch dashboard data" });
+        }
 
-    db.query(completedJobsSql, (err2, completedJobsRes) => {
-      if (err2) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+        db.query(upcomingJobsSql, (err4, upcomingJobsRes) => {
+          if (err4) {
+            console.error("Dashboard upcoming jobs error:", err4);
+            return res.status(500).json({ error: "Failed to fetch dashboard data" });
+          }
 
-      db.query(plannedJobsSql, (err3, plannedJobsRes) => {
-        if (err3) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+          const summary = dashboardRes[0] || {};
 
-        db.query(cancelledJobsSql, (err4, cancelledJobsRes) => {
-          if (err4) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+          const totalJobs = Number(summary.totalJobs || 0);
+          const finalCompleteJobs = Number(summary.finalCompleteJobs || 0);
+          const paperworkCheckedJobs = Number(summary.paperworkCheckedJobs || 0);
+          const monthlyTotalJobs = Number(summary.monthlyTotalJobs || 0);
+          const monthlyCompleteJobs = Number(summary.monthlyCompleteJobs || 0);
 
-          db.query(jobsByStatusSql, (err5, jobsByStatusRes) => {
-            if (err5) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+          res.json({
+            summary: {
+              totalJobs,
+              completedJobs: Number(summary.completedJobs || 0),
+              plannedJobs: Number(summary.plannedJobs || 0),
+              cancelledJobs: Number(summary.cancelledJobs || 0),
 
-            db.query(jobsByWorkstreamSql, (err6, jobsByWorkstreamRes) => {
-              if (err6) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+              overallCompletePercent: totalJobs
+                ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1))
+                : 0,
 
-              db.query(upcomingJobsSql, (err7, upcomingJobsRes) => {
-                if (err7) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+              monthlyCompletePercent: monthlyTotalJobs
+                ? Number(((monthlyCompleteJobs / monthlyTotalJobs) * 100).toFixed(1))
+                : 0,
 
-                db.query(recentClosuresSql, (err8, recentClosuresRes) => {
-                  if (err8) return res.status(500).json({ error: "Failed to fetch dashboard data" });
+              paperworkCheckedPercent: totalJobs
+                ? Number(((paperworkCheckedJobs / totalJobs) * 100).toFixed(1))
+                : 0,
 
-                  db.query(completionWorkflowSql, (err9, completionWorkflowRes) => {
-                    if (err9) {
-                      console.error("Completion workflow dashboard error:", err9);
-                      return res.status(500).json({ error: "Failed to fetch dashboard data" });
-                    }
+              finalSignoffPercent: totalJobs
+                ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1))
+                : 0,
 
-                    res.json({
-                      summary: {
-                        totalJobs: Number(totalJobsRes[0]?.totalJobs || 0),
-                        completedJobs: Number(completedJobsRes[0]?.completedJobs || 0),
-                        plannedJobs: Number(plannedJobsRes[0]?.plannedJobs || 0),
-                        cancelledJobs: Number(cancelledJobsRes[0]?.cancelledJobs || 0),
-                      },
-                      jobsByStatus: jobsByStatusRes.map((row) => ({
-                        name: row.status || "Unknown",
-                        value: Number(row.count || 0),
-                      })),
-                      jobsByWorkstream: jobsByWorkstreamRes.map((row) => ({
-                        name: row.workstream || "Unknown",
-                        value: Number(row.count || 0),
-                      })),
-                      upcomingJobs: upcomingJobsRes,
-                      recentClosures: recentClosuresRes,
-                      completionWorkflow: {
-                        total: Number(completionWorkflowRes[0]?.total || 0),
-                        awaitingSupervisor: Number(completionWorkflowRes[0]?.awaitingSupervisor || 0),
-                        awaitingPaperwork: Number(completionWorkflowRes[0]?.awaitingPaperwork || 0),
-                        awaitingManager: Number(completionWorkflowRes[0]?.awaitingManager || 0),
-                        awaitingFinal: Number(completionWorkflowRes[0]?.awaitingFinal || 0),
-                        complete: Number(completionWorkflowRes[0]?.complete || 0),
-                      },
-                    });
-                  });
-                });
-              });
-            });
+              monthlyTotalJobs,
+              monthlyCompleteJobs,
+              finalCompleteJobs,
+              paperworkCheckedJobs,
+            },
+
+            completionWorkflow: {
+              total: totalJobs,
+              awaitingSupervisor: Number(summary.awaitingSupervisor || 0),
+              awaitingPaperwork: Number(summary.awaitingPaperwork || 0),
+              awaitingManager: Number(summary.awaitingManager || 0),
+              awaitingFinal: Number(summary.awaitingFinal || 0),
+              complete: finalCompleteJobs,
+            },
+
+            workstreamCompletion: workstreamRes.map((row) => {
+              const total = Number(row.totalJobs || 0);
+              const complete = Number(row.completeJobs || 0);
+              const paperwork = Number(row.paperworkCheckedJobs || 0);
+
+              return {
+                workstream: row.workstream,
+                totalJobs: total,
+                completeJobs: complete,
+                paperworkCheckedJobs: paperwork,
+                supervisorCheckedJobs: Number(row.supervisorCheckedJobs || 0),
+                managerCheckedJobs: Number(row.managerCheckedJobs || 0),
+                completePercent: total
+                  ? Number(((complete / total) * 100).toFixed(1))
+                  : 0,
+                paperworkPercent: total
+                  ? Number(((paperwork / total) * 100).toFixed(1))
+                  : 0,
+              };
+            }),
+
+            monthlyWorkstreamCompletion: monthlyWorkstreamRes.map((row) => {
+              const total = Number(row.totalJobs || 0);
+              const complete = Number(row.completeJobs || 0);
+
+              return {
+                workstream: row.workstream,
+                totalJobs: total,
+                completeJobs: complete,
+                completePercent: total
+                  ? Number(((complete / total) * 100).toFixed(1))
+                  : 0,
+              };
+            }),
+
+            upcomingJobs: upcomingJobsRes,
           });
         });
       });
