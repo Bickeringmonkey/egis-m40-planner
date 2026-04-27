@@ -4991,7 +4991,7 @@ button:hover {
     width: 100% !important;
     border-collapse: collapse !important;
     table-layout: fixed !important;
-    font-size: 7.8px !important;
+    font-size: 6px !important;
   }
 
   .nightworks-print-table th,
