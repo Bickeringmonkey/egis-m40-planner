@@ -4704,6 +4704,10 @@ button:hover {
   td:nth-child(5) {
     display: none !important;
   }
+    th:nth-child(2),
+    td:nth-child(2) {
+    display: none !important;
+  }
 
   th:nth-child(6),
   td:nth-child(6) {
