@@ -1,376 +1,398 @@
 import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import api from "../services/api";
 
 function ExcelImport() {
+  const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState([]);
-  const [headers, setHeaders] = useState([]);
+  const [preview, setPreview] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [mode, setMode] = useState("upsert");
   const [message, setMessage] = useState("");
-  const [defaultClosureId, setDefaultClosureId] = useState("");
-  const [defaultWorkstreamId, setDefaultWorkstreamId] = useState("");
-  const [defaultCreatedBy, setDefaultCreatedBy] = useState("1");
+  const [loading, setLoading] = useState(false);
 
-  const cleanSqlText = (value) => {
-    if (value === null || value === undefined || value === "") return "";
-    return String(value).replace(/'/g, "''").replace(/\r?\n|\r/g, " ").trim();
-  };
+  const requiredHeaders = [
+    "job_number",
+    "activity",
+    "location",
+    "description",
+    "start_mp",
+    "end_mp",
+    "status",
+    "planned_date",
+    "closure_ref",
+    "workstream",
+  ];
 
-  const getValue = (row, possibleNames) => {
-    const keys = Object.keys(row);
-
-    for (const name of possibleNames) {
-      const foundKey = keys.find(
-        (key) => key.trim().toLowerCase() === name.trim().toLowerCase()
-      );
-
-      if (foundKey) return row[foundKey];
-    }
-
-    return "";
-  };
-
-  const formatDateForSql = (value) => {
-    if (!value) return null;
+  const normaliseDate = (value) => {
+    if (!value) return "";
 
     if (typeof value === "number") {
       const parsed = XLSX.SSF.parse_date_code(value);
-      if (!parsed) return null;
+      if (!parsed) return "";
 
-      const yyyy = parsed.y;
-      const mm = String(parsed.m).padStart(2, "0");
-      const dd = String(parsed.d).padStart(2, "0");
-
-      return `${yyyy}-${mm}-${dd}`;
+      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(
+        parsed.d
+      ).padStart(2, "0")}`;
     }
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
+    const text = String(value).trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
 
     return date.toISOString().split("T")[0];
   };
 
-  const formatMp = (value) => {
-    if (value === null || value === undefined || value === "") return "NULL";
+  const cleanRow = (row) => ({
+    job_number: row.job_number || row["Job Number"] || row["Job No"] || "",
+    title: row.title || row.Title || "",
+    work_order: row.work_order || row["Work Order"] || row.WO || "",
+    activity: row.activity || row.Activity || "",
+    location: row.location || row.Location || "",
+    description: row.description || row.Description || "",
+    activity_code: row.activity_code || row["Activity Code"] || "",
+    start_mp: row.start_mp || row["Start MP"] || row.Start || "",
+    end_mp: row.end_mp || row["End MP"] || row.End || "",
+    status: row.status || row.Status || "Planned",
+    planned_date: normaliseDate(row.planned_date || row["Planned Date"] || row.Date || ""),
+    closure_ref: row.closure_ref || row["Closure Ref"] || row.Closure || "",
+    workstream: row.workstream || row.Workstream || "",
+    notes: row.notes || row.Notes || "",
+  });
 
-    const text = String(value).trim();
-
-    if (!text) return "NULL";
-
-    const converted = text.replace("/", ".");
-
-    const number = Number(converted);
-
-    if (Number.isNaN(number)) return "NULL";
-
-    return number;
-  };
-
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
+  const readExcelFile = async (file) => {
     try {
+      setLoading(true);
       setMessage("");
+      setFileName(file.name);
+      setPreview([]);
+      setSummary(null);
 
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
+      const sheet = workbook.Sheets[firstSheetName];
 
-      const jsonRows = XLSX.utils.sheet_to_json(worksheet, {
+      const json = XLSX.utils.sheet_to_json(sheet, {
         defval: "",
         raw: true,
       });
 
-      if (!jsonRows.length) {
-        setRows([]);
-        setHeaders([]);
-        setMessage("No rows found in this spreadsheet.");
+      const cleaned = json.map(cleanRow);
+      setRows(cleaned);
+
+      if (!cleaned.length) {
+        setMessage("No rows found in the spreadsheet.");
         return;
       }
 
-      setRows(jsonRows);
-      setHeaders(Object.keys(jsonRows[0] || {}));
-      setMessage(`Loaded ${jsonRows.length} row(s) from ${firstSheetName}.`);
+      setMessage(`Loaded ${cleaned.length} row(s) from ${firstSheetName}. Now run Preview.`);
     } catch (err) {
       console.error(err);
       setMessage("Failed to read Excel file.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const generatedSql = useMemo(() => {
-    if (!rows.length) return "";
+  const handleFileInput = (event) => {
+    const file = event.target.files?.[0];
+    if (file) readExcelFile(file);
+  };
 
-    return rows
-      .map((row, index) => {
-        const rowNumber = index + 1;
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) readExcelFile(file);
+  };
 
-        const jobNumber =
-          getValue(row, ["job_number", "Job Number", "Job No", "Job"]) ||
-          `SRMD${String(rowNumber).padStart(5, "0")}`;
-
-        const title = getValue(row, ["title", "Title"]) || "Defects";
-
-        const closureId =
-          getValue(row, ["closure_id", "Closure ID"]) || defaultClosureId;
-
-        const workstreamId =
-          getValue(row, ["workstream_id", "Workstream ID"]) ||
-          defaultWorkstreamId;
-
-        const startMp = getValue(row, [
-          "start_mp",
-          "Start MP",
-          "Start",
-          "From MP",
-        ]);
-
-        const endMp = getValue(row, ["end_mp", "End MP", "End", "To MP"]);
-
-        const status = getValue(row, ["status", "Status"]) || "Planned";
-
-        const plannedDateValue = getValue(row, [
-          "planned_date",
-          "Planned Date",
-          "Date",
-        ]);
-
-        const plannedDate = formatDateForSql(plannedDateValue);
-
-        const workOrder = getValue(row, [
-          "work_order",
-          "Work Order",
-          "WO",
-          "Order",
-        ]);
-
-        const activity = getValue(row, ["activity", "Activity"]) || "";
-
-        const location = getValue(row, ["location", "Location"]) || "";
-
-        const description =
-          getValue(row, ["description", "Description", "Defect"]) || "";
-
-        const activityCode =
-          getValue(row, ["activity_code", "Activity Code"]) || "";
-
-        const notes = getValue(row, ["notes", "Notes"]) || "";
-
-        const createdBy =
-          getValue(row, ["created_by", "Created By"]) || defaultCreatedBy || 1;
-
-        if (!closureId || !workstreamId) {
-          return `-- Row ${rowNumber} skipped: missing closure_id or workstream_id`;
-        }
-
-        return `INSERT INTO jobs (
-  job_number,
-  title,
-  closure_id,
-  workstream_id,
-  start_mp,
-  end_mp,
-  status,
-  planned_date,
-  notes,
-  created_at,
-  work_order,
-  activity,
-  location,
-  description,
-  activity_code,
-  created_by
-) VALUES (
-  '${cleanSqlText(jobNumber)}',
-  '${cleanSqlText(title)}',
-  ${closureId},
-  ${workstreamId},
-  ${formatMp(startMp)},
-  ${formatMp(endMp)},
-  '${cleanSqlText(status)}',
-  ${plannedDate ? `'${plannedDate}'` : "NULL"},
-  ${notes ? `'${cleanSqlText(notes)}'` : "NULL"},
-  NOW(),
-  ${workOrder ? `'${cleanSqlText(workOrder)}'` : "NULL"},
-  ${activity ? `'${cleanSqlText(activity)}'` : "NULL"},
-  ${location ? `'${cleanSqlText(location)}'` : "NULL"},
-  ${description ? `'${cleanSqlText(description)}'` : "NULL"},
-  ${activityCode ? `'${cleanSqlText(activityCode)}'` : "NULL"},
-  ${createdBy}
-);`;
-      })
-      .join("\n\n");
-  }, [rows, defaultClosureId, defaultWorkstreamId, defaultCreatedBy]);
-
-  const copySql = async () => {
-    if (!generatedSql) {
-      setMessage("No SQL to copy.");
+  const runPreview = async () => {
+    if (!rows.length) {
+      setMessage("Upload an Excel file first.");
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(generatedSql);
-      setMessage("SQL copied to clipboard.");
+      setLoading(true);
+      setMessage("");
+
+      const res = await api.post("/jobs/import/preview", {
+        jobs: rows,
+        mode,
+      });
+
+      setSummary(res.data.summary);
+      setPreview(res.data.preview || []);
+      setMessage("Preview complete.");
     } catch (err) {
       console.error(err);
-      setMessage("Could not copy SQL. Please select and copy manually.");
+      setMessage(err.response?.data?.error || "Preview failed.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const downloadSql = () => {
-    if (!generatedSql) {
-      setMessage("No SQL to download.");
+  const commitImport = async () => {
+    if (!rows.length) {
+      setMessage("Upload an Excel file first.");
       return;
     }
 
-    const blob = new Blob([generatedSql], {
-      type: "text/sql;charset=utf-8",
+    if (summary?.errors > 0) {
+      setMessage("Fix preview errors before importing.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Import jobs now?\n\nInserts: ${summary?.inserts || 0}\nUpdates: ${
+        summary?.updates || 0
+      }`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const res = await api.post("/jobs/import/commit", {
+        jobs: rows,
+        mode,
+      });
+
+      setMessage(
+        `Import completed. Inserted: ${res.data.inserted || 0}. Updated: ${
+          res.data.updated || 0
+        }.`
+      );
+
+      await runPreview();
+    } catch (err) {
+      console.error(err);
+
+      if (err.response?.data?.details) {
+        setMessage(
+          err.response.data.details
+            .map((item) => `Row ${item.rowNumber}: ${item.errors.join(", ")}`)
+            .join("\n")
+        );
+      } else {
+        setMessage(err.response?.data?.error || "Import failed.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const duplicateCount = useMemo(() => {
+    const seen = new Set();
+    let count = 0;
+
+    rows.forEach((row) => {
+      const key = String(row.job_number || "").trim().toLowerCase();
+      if (!key) return;
+      if (seen.has(key)) count += 1;
+      seen.add(key);
     });
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    return count;
+  }, [rows]);
 
-    link.href = url;
-    link.download = "jobs-import.sql";
-    link.click();
+  const missingHeaders = useMemo(() => {
+    if (!rows.length) return [];
+    const available = Object.keys(rows[0] || {}).map((key) => key.toLowerCase());
+    return requiredHeaders.filter((header) => !available.includes(header.toLowerCase()));
+  }, [rows]);
 
-    URL.revokeObjectURL(url);
+  const getActionClass = (action) => {
+    if (action === "insert") return "status-badge status-planned";
+    if (action === "update") return "status-badge status-complete";
+    if (action === "error") return "status-badge status-cancelled";
+    return "status-badge";
   };
 
   return (
     <div className="list-page list-page-compact">
       <div className="list-page-header list-page-header-tight">
         <div>
-          <h1 className="page-title">Excel to SQL Import</h1>
+          <h1 className="page-title">Excel Import</h1>
           <p className="page-subtitle">
-            Upload an Excel file, preview the rows, then generate SQL for the jobs table.
+            Drag in an Excel file, preview inserts/updates, then import safely.
           </p>
         </div>
       </div>
 
-      {message && <p className="form-message">{message}</p>}
+      {message && <pre className="form-message" style={{ whiteSpace: "pre-wrap" }}>{message}</pre>}
 
       <div className="filter-card filter-card-compact">
+        <div
+          onDrop={handleDrop}
+          onDragOver={(event) => event.preventDefault()}
+          style={{
+            border: "2px dashed #abc022",
+            borderRadius: "18px",
+            padding: "28px",
+            textAlign: "center",
+            background: "#f8fafc",
+            marginBottom: "18px",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Drop Excel file here</h2>
+          <p>Accepted: .xlsx, .xls, .csv</p>
+
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleFileInput}
+          />
+
+          {fileName && <p><strong>Selected:</strong> {fileName}</p>}
+        </div>
+
         <div className="detail-form-grid">
           <div className="form-group">
-            <label>Excel File</label>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileUpload}
-            />
+            <label>Import Mode</label>
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="upsert">Insert new and update existing</option>
+              <option value="insert_only">Insert only - block duplicates</option>
+              <option value="update_existing">Update existing only</option>
+            </select>
           </div>
 
           <div className="form-group">
-            <label>Default Closure ID</label>
-            <input
-              type="number"
-              value={defaultClosureId}
-              onChange={(e) => setDefaultClosureId(e.target.value)}
-              placeholder="e.g. 10"
-            />
+            <label>Rows Loaded</label>
+            <input value={rows.length} readOnly />
           </div>
 
           <div className="form-group">
-            <label>Default Workstream ID</label>
-            <input
-              type="number"
-              value={defaultWorkstreamId}
-              onChange={(e) => setDefaultWorkstreamId(e.target.value)}
-              placeholder="e.g. 1"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Default Created By</label>
-            <input
-              type="number"
-              value={defaultCreatedBy}
-              onChange={(e) => setDefaultCreatedBy(e.target.value)}
-            />
+            <label>Duplicate Job Numbers in File</label>
+            <input value={duplicateCount} readOnly />
           </div>
         </div>
 
         <div className="detail-form-actions">
-          <button type="button" className="detail-btn" onClick={copySql}>
-            Copy SQL
+          <button
+            type="button"
+            className="detail-btn detail-btn-secondary"
+            onClick={runPreview}
+            disabled={loading || !rows.length}
+          >
+            Preview Import
           </button>
 
           <button
             type="button"
-            className="detail-btn detail-btn-secondary"
-            onClick={downloadSql}
+            className="detail-btn"
+            onClick={commitImport}
+            disabled={loading || !rows.length || !summary || summary.errors > 0}
           >
-            Download SQL
+            Commit Import
           </button>
         </div>
       </div>
 
-      {headers.length > 0 && (
+      {missingHeaders.length > 0 && (
         <div className="detail-card" style={{ marginBottom: "20px" }}>
-          <h2 style={{ marginTop: 0 }}>Detected Columns</h2>
-          <p>{headers.join(", ")}</p>
+          <h2 style={{ marginTop: 0 }}>Header Check</h2>
+          <p>
+            Missing expected headers: <strong>{missingHeaders.join(", ")}</strong>
+          </p>
+          <p>
+            The importer can still work with some alternative names, but best
+            practice is to use the standard headers.
+          </p>
         </div>
       )}
 
-      {rows.length > 0 && (
-        <div className="list-table-card" style={{ marginBottom: "20px" }}>
+      {summary && (
+        <div className="dashboard-kpi-grid" style={{ marginBottom: "20px" }}>
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-body">
+              <div className="dashboard-kpi-label">Rows</div>
+              <div className="dashboard-kpi-value">{summary.totalRows}</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-body">
+              <div className="dashboard-kpi-label">Inserts</div>
+              <div className="dashboard-kpi-value">{summary.inserts}</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-body">
+              <div className="dashboard-kpi-label">Updates</div>
+              <div className="dashboard-kpi-value">{summary.updates}</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-body">
+              <div className="dashboard-kpi-label">Errors</div>
+              <div className="dashboard-kpi-value">{summary.errors}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {preview.length > 0 && (
+        <div className="list-table-card">
           <div className="list-table-header">
-            <h2>Preview</h2>
-            <span>{rows.length} row(s)</span>
+            <h2>Import Preview</h2>
+            <span>{preview.length} row(s)</span>
           </div>
 
           <div className="table-wrapper">
             <table className="enhanced-table">
               <thead>
                 <tr>
-                  {headers.map((header) => (
-                    <th key={header}>{header}</th>
-                  ))}
+                  <th>Row</th>
+                  <th>Action</th>
+                  <th>Job Number</th>
+                  <th>Closure Ref</th>
+                  <th>Workstream</th>
+                  <th>Activity</th>
+                  <th>Planned Date</th>
+                  <th>Issues</th>
                 </tr>
               </thead>
 
               <tbody>
-                {rows.slice(0, 10).map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {headers.map((header) => (
-                      <td key={header}>{String(row[header] ?? "")}</td>
-                    ))}
+                {preview.map((row) => (
+                  <tr key={`${row.rowNumber}-${row.job.job_number}`}>
+                    <td>{row.rowNumber}</td>
+                    <td>
+                      <span className={getActionClass(row.action)}>
+                        {row.action}
+                      </span>
+                    </td>
+                    <td>{row.job.job_number}</td>
+                    <td>{row.job.closure_ref}</td>
+                    <td>{row.job.workstream}</td>
+                    <td>{row.job.activity}</td>
+                    <td>{row.job.planned_date}</td>
+                    <td>
+                      {row.errors?.length ? row.errors.join(", ") : ""}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          {rows.length > 10 && (
-            <p style={{ padding: "0 16px 16px" }}>
-              Showing first 10 rows only.
-            </p>
-          )}
         </div>
       )}
 
-      <div className="list-table-card">
-        <div className="list-table-header">
-          <h2>Generated SQL</h2>
-          <span>{rows.length ? `${rows.length} possible statement(s)` : "No file loaded"}</span>
-        </div>
-
-        <textarea
-          value={generatedSql}
-          readOnly
-          style={{
-            width: "100%",
-            minHeight: "420px",
-            border: "none",
-            padding: "16px",
-            fontFamily: "Consolas, monospace",
-            fontSize: "13px",
-            resize: "vertical",
-            boxSizing: "border-box",
-          }}
-          placeholder="Generated SQL will appear here..."
-        />
+      <div className="detail-card" style={{ marginTop: "20px" }}>
+        <h2 style={{ marginTop: 0 }}>Recommended Excel Headers</h2>
+        <p>
+          job_number, title, work_order, activity, location, description,
+          activity_code, start_mp, end_mp, status, planned_date, closure_ref,
+          workstream, notes
+        </p>
       </div>
     </div>
   );
