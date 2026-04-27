@@ -5075,3 +5075,23 @@ button:hover {
     display: none !important;
   }
 }
+.nightworks-print-brand img {
+  max-height: 42px;
+  width: auto;
+}
+@media print {
+  .nightworks-print-brand img {
+    max-height: 28px !important;
+    width: auto !important;
+  }
+
+  .nightworks-print-table th:nth-child(8),
+  .nightworks-print-table td:nth-child(8) {
+    display: none !important;
+  }
+
+  .nightworks-print-table th:nth-child(9),
+  .nightworks-print-table td:nth-child(9) {
+    display: none !important;
+  }
+}
