@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const XLSX = require("xlsx");
 require("dotenv").config();
 
 const db = require("./db/db");
@@ -12,11 +14,61 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
 
+const upload = multer({ storage: multer.memoryStorage() });
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 
 // -----------------------------
-// Helpers
+// Excel Validation Helpers
+// Updated: 27 April 2026
+// -----------------------------
+const REQUIRED_HEADERS = [
+  "job_number",
+  "title",
+  "work_order",
+  "activity",
+  "location",
+  "description",
+  "activity_code",
+  "start_mp",
+  "end_mp",
+  "status",
+  "planned_date",
+  "closure_ref",
+  "workstream",
+  "notes",
+];
+
+function normaliseHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+}
+
+function excelDateToJSDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number") {
+    const date = XLSX.SSF.parse_date_code(value);
+    if (!date) return null;
+
+    return `${date.y}-${String(date.m).padStart(2, "0")}-${String(date.d).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) return null;
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+// -----------------------------
+// General Helpers
 // -----------------------------
 function signToken(user) {
   return jwt.sign(
@@ -42,6 +94,129 @@ function normaliseClosureDates(closure_date, start_date, end_date) {
     end_date: finalEndDate,
   };
 }
+
+// -----------------------------
+// Excel Upload Validation
+// -----------------------------
+app.post(
+  "/api/import-jobs/validate",
+  auth,
+  requireRole("admin"),
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          valid: false,
+          errors: ["No file uploaded."],
+        });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, {
+        type: "buffer",
+        cellDates: true,
+      });
+
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      if (!sheet) {
+        return res.status(400).json({
+          valid: false,
+          errors: ["The Excel file does not contain a readable sheet."],
+        });
+      }
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        defval: "",
+        raw: false,
+      });
+
+      if (!rows.length) {
+        return res.status(400).json({
+          valid: false,
+          errors: ["The Excel sheet is empty."],
+        });
+      }
+
+      const originalHeaders = Object.keys(rows[0]);
+      const normalisedHeaders = originalHeaders.map(normaliseHeader);
+
+      const missingHeaders = REQUIRED_HEADERS.filter(
+        (header) => !normalisedHeaders.includes(header)
+      );
+
+      const errors = [];
+      const warnings = [];
+
+      if (missingHeaders.length > 0) {
+        errors.push(`Missing required headers: ${missingHeaders.join(", ")}`);
+      }
+
+      const headerMap = {};
+      originalHeaders.forEach((header) => {
+        headerMap[normaliseHeader(header)] = header;
+      });
+
+      const seenJobNumbers = new Set();
+
+      rows.forEach((row, index) => {
+        const excelRowNumber = index + 2;
+        const getValue = (field) => row[headerMap[field]];
+
+        const jobNumber = String(getValue("job_number") || "").trim();
+        const title = String(getValue("title") || "").trim();
+        const plannedDate = getValue("planned_date");
+        const closureRef = String(getValue("closure_ref") || "").trim();
+        const workstream = String(getValue("workstream") || "").trim();
+        const startMp = getValue("start_mp");
+        const endMp = getValue("end_mp");
+
+        if (!jobNumber) errors.push(`Row ${excelRowNumber}: job_number is missing.`);
+        if (!title) errors.push(`Row ${excelRowNumber}: title is missing.`);
+        if (!plannedDate || !excelDateToJSDate(plannedDate)) {
+          errors.push(`Row ${excelRowNumber}: planned_date is missing or invalid.`);
+        }
+        if (!closureRef) errors.push(`Row ${excelRowNumber}: closure_ref is missing.`);
+        if (!workstream) errors.push(`Row ${excelRowNumber}: workstream is missing.`);
+
+        if (jobNumber) {
+          const key = jobNumber.toLowerCase();
+          if (seenJobNumbers.has(key)) {
+            errors.push(`Row ${excelRowNumber}: duplicate job_number in this Excel file: ${jobNumber}.`);
+          }
+          seenJobNumbers.add(key);
+        }
+
+        if (startMp !== "" && isNaN(Number(startMp))) {
+          errors.push(`Row ${excelRowNumber}: start_mp must be a number.`);
+        }
+
+        if (endMp !== "" && isNaN(Number(endMp))) {
+          errors.push(`Row ${excelRowNumber}: end_mp must be a number.`);
+        }
+
+        if (startMp !== "" && endMp !== "" && Number(startMp) > Number(endMp)) {
+          warnings.push(`Row ${excelRowNumber}: start_mp is greater than end_mp.`);
+        }
+      });
+
+      return res.json({
+        valid: errors.length === 0,
+        totalRows: rows.length,
+        errors,
+        warnings,
+        headersFound: normalisedHeaders,
+      });
+    } catch (error) {
+      console.error("Excel validation error:", error);
+      return res.status(500).json({
+        valid: false,
+        errors: ["Server error while validating Excel file."],
+      });
+    }
+  }
+);
 
 // -----------------------------
 // Public routes
@@ -155,16 +330,7 @@ app.post("/api/users", auth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "Name, email, password, and role are required" });
   }
 
-  if (
-  ![
-    "admin",
-    "planner",
-    "viewer",
-    "supervisor",
-    "night_manager",
-    "lead_scheduler",
-  ].includes(role)
-) {
+  if (!["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"].includes(role)) {
     return res.status(400).json({ error: "Invalid role" });
   }
 
@@ -198,16 +364,7 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
     return res.status(400).json({ error: "Name, email, and role are required" });
   }
 
-  if (
-  ![
-    "admin",
-    "planner",
-    "viewer",
-    "supervisor",
-    "night_manager",
-    "lead_scheduler",
-  ].includes(role)
-) {
+  if (!["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"].includes(role)) {
     return res.status(400).json({ error: "Invalid role" });
   }
 
@@ -219,12 +376,7 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
 
       const sql = `
         UPDATE users
-        SET
-          name = ?,
-          email = ?,
-          role = ?,
-          is_active = ?,
-          password_hash = ?
+        SET name = ?, email = ?, role = ?, is_active = ?, password_hash = ?
         WHERE id = ?
       `;
 
@@ -234,10 +386,7 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
           return res.status(500).json({ error: "Failed to update user" });
         }
 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ error: "User not found" });
-        }
-
+        if (result.affectedRows === 0) return res.status(404).json({ error: "User not found" });
         res.json({ message: "User updated successfully" });
       });
     } catch (err) {
@@ -250,11 +399,7 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
 
   const sql = `
     UPDATE users
-    SET
-      name = ?,
-      email = ?,
-      role = ?,
-      is_active = ?
+    SET name = ?, email = ?, role = ?, is_active = ?
     WHERE id = ?
   `;
 
@@ -264,16 +409,13 @@ app.put("/api/users/:id", auth, requireRole("admin"), async (req, res) => {
       return res.status(500).json({ error: "Failed to update user" });
     }
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
+    if (result.affectedRows === 0) return res.status(404).json({ error: "User not found" });
     res.json({ message: "User updated successfully" });
   });
 });
 
 // -----------------------------
-// Protected routes below
+// Workstreams
 // -----------------------------
 app.get("/api/workstreams", auth, (req, res) => {
   const sql = "SELECT * FROM workstreams ORDER BY name";
@@ -288,6 +430,9 @@ app.get("/api/workstreams", auth, (req, res) => {
   });
 });
 
+// -----------------------------
+// Dashboard
+// -----------------------------
 app.get("/api/dashboard/overview", auth, (req, res) => {
   const { date, closureId } = req.query;
 
@@ -362,14 +507,7 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
   `;
 
   const upcomingJobsSql = `
-    SELECT
-      jobs.id,
-      jobs.job_number,
-      jobs.activity,
-      jobs.title,
-      jobs.planned_date,
-      jobs.status,
-      closures.closure_ref
+    SELECT jobs.id, jobs.job_number, jobs.activity, jobs.title, jobs.planned_date, jobs.status, closures.closure_ref
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     ${whereClause}
@@ -402,7 +540,6 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
           }
 
           const summary = dashboardRes[0] || {};
-
           const totalJobs = Number(summary.totalJobs || 0);
           const finalCompleteJobs = Number(summary.finalCompleteJobs || 0);
           const paperworkCheckedJobs = Number(summary.paperworkCheckedJobs || 0);
@@ -410,39 +547,21 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
           const monthlyCompleteJobs = Number(summary.monthlyCompleteJobs || 0);
 
           res.json({
-            filters: {
-              date: date || null,
-              closureId: closureId || null,
-            },
-
+            filters: { date: date || null, closureId: closureId || null },
             summary: {
               totalJobs,
               completedJobs: Number(summary.completedJobs || 0),
               plannedJobs: Number(summary.plannedJobs || 0),
               cancelledJobs: Number(summary.cancelledJobs || 0),
-
-              overallCompletePercent: totalJobs
-                ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1))
-                : 0,
-
-              monthlyCompletePercent: monthlyTotalJobs
-                ? Number(((monthlyCompleteJobs / monthlyTotalJobs) * 100).toFixed(1))
-                : 0,
-
-              paperworkCheckedPercent: totalJobs
-                ? Number(((paperworkCheckedJobs / totalJobs) * 100).toFixed(1))
-                : 0,
-
-              finalSignoffPercent: totalJobs
-                ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1))
-                : 0,
-
+              overallCompletePercent: totalJobs ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1)) : 0,
+              monthlyCompletePercent: monthlyTotalJobs ? Number(((monthlyCompleteJobs / monthlyTotalJobs) * 100).toFixed(1)) : 0,
+              paperworkCheckedPercent: totalJobs ? Number(((paperworkCheckedJobs / totalJobs) * 100).toFixed(1)) : 0,
+              finalSignoffPercent: totalJobs ? Number(((finalCompleteJobs / totalJobs) * 100).toFixed(1)) : 0,
               monthlyTotalJobs,
               monthlyCompleteJobs,
               finalCompleteJobs,
               paperworkCheckedJobs,
             },
-
             completionWorkflow: {
               total: totalJobs,
               awaitingSupervisor: Number(summary.awaitingSupervisor || 0),
@@ -451,12 +570,10 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
               awaitingFinal: Number(summary.awaitingFinal || 0),
               complete: finalCompleteJobs,
             },
-
             workstreamCompletion: workstreamRes.map((row) => {
               const total = Number(row.totalJobs || 0);
               const complete = Number(row.completeJobs || 0);
               const paperwork = Number(row.paperworkCheckedJobs || 0);
-
               return {
                 workstream: row.workstream,
                 totalJobs: total,
@@ -464,29 +581,20 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
                 paperworkCheckedJobs: paperwork,
                 supervisorCheckedJobs: Number(row.supervisorCheckedJobs || 0),
                 managerCheckedJobs: Number(row.managerCheckedJobs || 0),
-                completePercent: total
-                  ? Number(((complete / total) * 100).toFixed(1))
-                  : 0,
-                paperworkPercent: total
-                  ? Number(((paperwork / total) * 100).toFixed(1))
-                  : 0,
+                completePercent: total ? Number(((complete / total) * 100).toFixed(1)) : 0,
+                paperworkPercent: total ? Number(((paperwork / total) * 100).toFixed(1)) : 0,
               };
             }),
-
             monthlyWorkstreamCompletion: monthlyWorkstreamRes.map((row) => {
               const total = Number(row.totalJobs || 0);
               const complete = Number(row.completeJobs || 0);
-
               return {
                 workstream: row.workstream,
                 totalJobs: total,
                 completeJobs: complete,
-                completePercent: total
-                  ? Number(((complete / total) * 100).toFixed(1))
-                  : 0,
+                completePercent: total ? Number(((complete / total) * 100).toFixed(1)) : 0,
               };
             }),
-
             upcomingJobs: upcomingJobsRes,
           });
         });
@@ -542,20 +650,9 @@ app.get("/api/closures/:id", auth, (req, res) => {
   const closureSql = `SELECT * FROM closures WHERE id = ?`;
 
   const jobsSql = `
-    SELECT 
-      jobs.id,
-      jobs.job_number,
-      jobs.title,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.start_mp, jobs.end_mp, jobs.status,
+           jobs.planned_date, workstreams.name AS workstream
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     WHERE jobs.closure_id = ?
@@ -591,29 +688,10 @@ app.get("/api/closures/:id", auth, (req, res) => {
 
 app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
   const {
-    closure_ref,
-    closure_date,
-    start_date,
-    end_date,
-    carriageway,
-    start_mp,
-    end_mp,
-    closure_type,
-    status,
-    notes,
-    nems_number,
-    junctions_between,
-    lane_configuration,
-    cone_on_time,
-    cone_off_time,
-    briefing_time,
-    duty_manager,
-    night_supervisor,
-    depot,
-    welfare_location,
-    nearest_hospital,
-    tm_install_time,
-    tm_clear_time,
+    closure_ref, closure_date, start_date, end_date, carriageway, start_mp, end_mp,
+    closure_type, status, notes, nems_number, junctions_between, lane_configuration,
+    cone_on_time, cone_off_time, briefing_time, duty_manager, night_supervisor,
+    depot, welfare_location, nearest_hospital, tm_install_time, tm_clear_time,
     slip_roads = [],
   } = req.body;
 
@@ -621,29 +699,10 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
 
   const closureSql = `
     INSERT INTO closures (
-      closure_ref,
-      closure_date,
-      start_date,
-      end_date,
-      carriageway,
-      start_mp,
-      end_mp,
-      closure_type,
-      status,
-      notes,
-      nems_number,
-      junctions_between,
-      lane_configuration,
-      cone_on_time,
-      cone_off_time,
-      briefing_time,
-      duty_manager,
-      night_supervisor,
-      depot,
-      welfare_location,
-      nearest_hospital,
-      tm_install_time,
-      tm_clear_time
+      closure_ref, closure_date, start_date, end_date, carriageway, start_mp, end_mp,
+      closure_type, status, notes, nems_number, junctions_between, lane_configuration,
+      cone_on_time, cone_off_time, briefing_time, duty_manager, night_supervisor,
+      depot, welfare_location, nearest_hospital, tm_install_time, tm_clear_time
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
@@ -651,29 +710,12 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
   db.query(
     closureSql,
     [
-      closure_ref,
-      dates.closure_date,
-      dates.start_date,
-      dates.end_date,
-      carriageway || null,
-      start_mp || null,
-      end_mp || null,
-      closure_type || null,
-      status || null,
-      notes || null,
-      nems_number || null,
-      junctions_between || null,
-      lane_configuration || null,
-      cone_on_time || null,
-      cone_off_time || null,
-      briefing_time || null,
-      duty_manager || null,
-      night_supervisor || null,
-      depot || null,
-      welfare_location || null,
-      nearest_hospital || null,
-      tm_install_time || null,
-      tm_clear_time || null,
+      closure_ref, dates.closure_date, dates.start_date, dates.end_date, carriageway || null,
+      start_mp || null, end_mp || null, closure_type || null, status || null, notes || null,
+      nems_number || null, junctions_between || null, lane_configuration || null,
+      cone_on_time || null, cone_off_time || null, briefing_time || null, duty_manager || null,
+      night_supervisor || null, depot || null, welfare_location || null, nearest_hospital || null,
+      tm_install_time || null, tm_clear_time || null,
     ],
     (err, result) => {
       if (err) {
@@ -684,9 +726,7 @@ app.post("/api/closures", auth, requireRole("admin", "planner"), (req, res) => {
       const closureId = result.insertId;
       const cleanedSlipRoads = slip_roads.map((sr) => (sr || "").trim()).filter(Boolean);
 
-      if (cleanedSlipRoads.length === 0) {
-        return res.json({ message: "Closure created", id: closureId });
-      }
+      if (cleanedSlipRoads.length === 0) return res.json({ message: "Closure created", id: closureId });
 
       const slipRoadValues = cleanedSlipRoads.map((name) => [closureId, name, null]);
 
@@ -706,29 +746,10 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
   const closureId = req.params.id;
 
   const {
-    closure_ref,
-    closure_date,
-    start_date,
-    end_date,
-    carriageway,
-    start_mp,
-    end_mp,
-    closure_type,
-    status,
-    notes,
-    nems_number,
-    junctions_between,
-    lane_configuration,
-    cone_on_time,
-    cone_off_time,
-    briefing_time,
-    duty_manager,
-    night_supervisor,
-    depot,
-    welfare_location,
-    nearest_hospital,
-    tm_install_time,
-    tm_clear_time,
+    closure_ref, closure_date, start_date, end_date, carriageway, start_mp, end_mp,
+    closure_type, status, notes, nems_number, junctions_between, lane_configuration,
+    cone_on_time, cone_off_time, briefing_time, duty_manager, night_supervisor,
+    depot, welfare_location, nearest_hospital, tm_install_time, tm_clear_time,
     slip_roads = [],
   } = req.body;
 
@@ -736,60 +757,23 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
 
   const updateSql = `
     UPDATE closures
-    SET
-      closure_ref = ?,
-      closure_date = ?,
-      start_date = ?,
-      end_date = ?,
-      carriageway = ?,
-      start_mp = ?,
-      end_mp = ?,
-      closure_type = ?,
-      status = ?,
-      notes = ?,
-      nems_number = ?,
-      junctions_between = ?,
-      lane_configuration = ?,
-      cone_on_time = ?,
-      cone_off_time = ?,
-      briefing_time = ?,
-      duty_manager = ?,
-      night_supervisor = ?,
-      depot = ?,
-      welfare_location = ?,
-      nearest_hospital = ?,
-      tm_install_time = ?,
-      tm_clear_time = ?
+    SET closure_ref = ?, closure_date = ?, start_date = ?, end_date = ?, carriageway = ?,
+        start_mp = ?, end_mp = ?, closure_type = ?, status = ?, notes = ?, nems_number = ?,
+        junctions_between = ?, lane_configuration = ?, cone_on_time = ?, cone_off_time = ?,
+        briefing_time = ?, duty_manager = ?, night_supervisor = ?, depot = ?, welfare_location = ?,
+        nearest_hospital = ?, tm_install_time = ?, tm_clear_time = ?
     WHERE id = ?
   `;
 
   db.query(
     updateSql,
     [
-      closure_ref,
-      dates.closure_date,
-      dates.start_date,
-      dates.end_date,
-      carriageway || null,
-      start_mp || null,
-      end_mp || null,
-      closure_type || null,
-      status || null,
-      notes || null,
-      nems_number || null,
-      junctions_between || null,
-      lane_configuration || null,
-      cone_on_time || null,
-      cone_off_time || null,
-      briefing_time || null,
-      duty_manager || null,
-      night_supervisor || null,
-      depot || null,
-      welfare_location || null,
-      nearest_hospital || null,
-      tm_install_time || null,
-      tm_clear_time || null,
-      closureId,
+      closure_ref, dates.closure_date, dates.start_date, dates.end_date, carriageway || null,
+      start_mp || null, end_mp || null, closure_type || null, status || null, notes || null,
+      nems_number || null, junctions_between || null, lane_configuration || null,
+      cone_on_time || null, cone_off_time || null, briefing_time || null, duty_manager || null,
+      night_supervisor || null, depot || null, welfare_location || null, nearest_hospital || null,
+      tm_install_time || null, tm_clear_time || null, closureId,
     ],
     (err) => {
       if (err) {
@@ -801,10 +785,7 @@ app.put("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res) =
         if (deleteErr) return res.status(500).json({ error: "Closure updated but slip roads cleanup failed" });
 
         const cleanedSlipRoads = slip_roads.map((sr) => (sr || "").trim()).filter(Boolean);
-
-        if (cleanedSlipRoads.length === 0) {
-          return res.json({ message: "Closure updated successfully" });
-        }
+        if (cleanedSlipRoads.length === 0) return res.json({ message: "Closure updated successfully" });
 
         const slipRoadValues = cleanedSlipRoads.map((name) => [closureId, name, null]);
 
@@ -844,25 +825,10 @@ app.delete("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res
 // -----------------------------
 app.get("/api/jobs", auth, (req, res) => {
   const sql = `
-    SELECT 
-      jobs.id,
-      jobs.job_number,
-      jobs.title,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.closure_id,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      closures.closure_ref,
-      closures.closure_date,
-      closures.start_date,
-      closures.end_date,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.closure_id, jobs.start_mp, jobs.end_mp,
+           jobs.status, jobs.planned_date, closures.closure_ref, closures.closure_date,
+           closures.start_date, closures.end_date, workstreams.name AS workstream
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -878,30 +844,13 @@ app.get("/api/jobs", auth, (req, res) => {
 app.get("/api/jobs/by-range", auth, (req, res) => {
   const { startDate, endDate } = req.query;
 
-  if (!startDate || !endDate) {
-    return res.status(400).json({ error: "Start date and end date are required" });
-  }
+  if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
 
   const sql = `
-    SELECT 
-      jobs.id,
-      jobs.job_number,
-      jobs.title,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.closure_id,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      closures.closure_ref,
-      closures.closure_date,
-      closures.start_date,
-      closures.end_date,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.closure_id, jobs.start_mp, jobs.end_mp,
+           jobs.status, jobs.planned_date, closures.closure_ref, closures.closure_date,
+           closures.start_date, closures.end_date, workstreams.name AS workstream
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -921,28 +870,11 @@ app.get("/api/jobs/by-range", auth, (req, res) => {
 
 app.get("/api/jobs/:id", auth, (req, res) => {
   const sql = `
-    SELECT 
-      jobs.id,
-      jobs.job_number,
-      jobs.title,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      jobs.notes,
-      jobs.closure_id,
-      jobs.workstream_id,
-      closures.closure_ref,
-      closures.closure_date,
-      closures.start_date,
-      closures.end_date,
-      closures.carriageway,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.start_mp, jobs.end_mp, jobs.status,
+           jobs.planned_date, jobs.notes, jobs.closure_id, jobs.workstream_id,
+           closures.closure_ref, closures.closure_date, closures.start_date, closures.end_date,
+           closures.carriageway, workstreams.name AS workstream
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -957,61 +889,19 @@ app.get("/api/jobs/:id", auth, (req, res) => {
 });
 
 app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
-  const {
-    job_number,
-    title,
-    work_order,
-    activity,
-    location,
-    description,
-    activity_code,
-    closure_id,
-    workstream_id,
-    start_mp,
-    end_mp,
-    status,
-    planned_date,
-    notes,
-  } = req.body;
+  const { job_number, title, work_order, activity, location, description, activity_code, closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes } = req.body;
 
   const sql = `
     INSERT INTO jobs (
-      job_number,
-      title,
-      work_order,
-      activity,
-      location,
-      description,
-      activity_code,
-      closure_id,
-      workstream_id,
-      start_mp,
-      end_mp,
-      status,
-      planned_date,
-      notes
+      job_number, title, work_order, activity, location, description, activity_code,
+      closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
     sql,
-    [
-      job_number,
-      title || null,
-      work_order || null,
-      activity || null,
-      location || null,
-      description || null,
-      activity_code || null,
-      closure_id,
-      workstream_id,
-      start_mp || null,
-      end_mp || null,
-      status || null,
-      planned_date || null,
-      notes || null,
-    ],
+    [job_number, title || null, work_order || null, activity || null, location || null, description || null, activity_code || null, closure_id, workstream_id, start_mp || null, end_mp || null, status || null, planned_date || null, notes || null],
     (err, result) => {
       if (err) return res.status(500).json({ error: "Insert failed" });
       res.json({ message: "Job created", id: result.insertId });
@@ -1020,62 +910,19 @@ app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
 });
 
 app.put("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) => {
-  const {
-    job_number,
-    title,
-    work_order,
-    activity,
-    location,
-    description,
-    activity_code,
-    closure_id,
-    workstream_id,
-    start_mp,
-    end_mp,
-    status,
-    planned_date,
-    notes,
-  } = req.body;
+  const { job_number, title, work_order, activity, location, description, activity_code, closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes } = req.body;
 
   const sql = `
     UPDATE jobs
-    SET
-      job_number = ?,
-      title = ?,
-      work_order = ?,
-      activity = ?,
-      location = ?,
-      description = ?,
-      activity_code = ?,
-      closure_id = ?,
-      workstream_id = ?,
-      start_mp = ?,
-      end_mp = ?,
-      status = ?,
-      planned_date = ?,
-      notes = ?
+    SET job_number = ?, title = ?, work_order = ?, activity = ?, location = ?, description = ?,
+        activity_code = ?, closure_id = ?, workstream_id = ?, start_mp = ?, end_mp = ?,
+        status = ?, planned_date = ?, notes = ?
     WHERE id = ?
   `;
 
   db.query(
     sql,
-    [
-      job_number,
-      title || null,
-      work_order || null,
-      activity || null,
-      location || null,
-      description || null,
-      activity_code || null,
-      closure_id,
-      workstream_id,
-      start_mp || null,
-      end_mp || null,
-      status || null,
-      planned_date || null,
-      notes || null,
-      req.params.id,
-    ],
+    [job_number, title || null, work_order || null, activity || null, location || null, description || null, activity_code || null, closure_id, workstream_id, start_mp || null, end_mp || null, status || null, planned_date || null, notes || null, req.params.id],
     (err) => {
       if (err) return res.status(500).json({ error: "Failed to update job" });
       res.json({ message: "Job updated successfully" });
@@ -1090,6 +937,7 @@ app.delete("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) =>
     res.json({ message: "Job deleted successfully" });
   });
 });
+
 // -----------------------------
 // Smart Excel Job Import
 // -----------------------------
@@ -1121,7 +969,6 @@ function buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs) 
 
   return jobs.map((job, index) => {
     const rowNumber = index + 2;
-
     const jobNumber = normaliseImportText(job.job_number);
     const closureRef = normaliseImportText(job.closure_ref);
     const workstreamName = normaliseImportText(job.workstream);
@@ -1131,7 +978,6 @@ function buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs) 
     const existingJobId = existingJobMap[normaliseImportKey(jobNumber)];
 
     const errors = [];
-
     if (!jobNumber) errors.push("Missing job_number");
     if (!closureRef) errors.push("Missing closure_ref");
     if (!workstreamName) errors.push("Missing workstream");
@@ -1182,9 +1028,7 @@ function buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs) 
 app.post("/api/jobs/import/preview", auth, requireRole("admin", "planner"), (req, res) => {
   const { jobs = [], mode = "upsert" } = req.body;
 
-  if (!Array.isArray(jobs) || jobs.length === 0) {
-    return res.status(400).json({ error: "No jobs provided" });
-  }
+  if (!Array.isArray(jobs) || jobs.length === 0) return res.status(400).json({ error: "No jobs provided" });
 
   db.query(`SELECT id, closure_ref FROM closures`, (closureErr, closures) => {
     if (closureErr) {
@@ -1204,13 +1048,7 @@ app.post("/api/jobs/import/preview", auth, requireRole("admin", "planner"), (req
           return res.status(500).json({ error: "Failed to fetch existing jobs" });
         }
 
-        const preview = buildImportJobPreview(
-          jobs,
-          mode,
-          closures,
-          workstreams,
-          existingJobs
-        );
+        const preview = buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs);
 
         const summary = {
           totalRows: preview.length,
@@ -1228,9 +1066,7 @@ app.post("/api/jobs/import/preview", auth, requireRole("admin", "planner"), (req
 app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req, res) => {
   const { jobs = [], mode = "upsert" } = req.body;
 
-  if (!Array.isArray(jobs) || jobs.length === 0) {
-    return res.status(400).json({ error: "No jobs provided" });
-  }
+  if (!Array.isArray(jobs) || jobs.length === 0) return res.status(400).json({ error: "No jobs provided" });
 
   db.query(`SELECT id, closure_ref FROM closures`, (closureErr, closures) => {
     if (closureErr) {
@@ -1250,14 +1086,7 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
           return res.status(500).json({ error: "Failed to fetch existing jobs" });
         }
 
-        const preview = buildImportJobPreview(
-          jobs,
-          mode,
-          closures,
-          workstreams,
-          existingJobs
-        );
-
+        const preview = buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs);
         const errorRows = preview.filter((row) => row.action === "error");
 
         if (errorRows.length > 0) {
@@ -1277,11 +1106,7 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
 
         const runNext = () => {
           if (index >= preview.length) {
-            return res.json({
-              message: "Import completed",
-              inserted,
-              updated,
-            });
+            return res.json({ message: "Import completed", inserted, updated });
           }
 
           const row = preview[index];
@@ -1307,20 +1132,8 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
           if (row.action === "insert") {
             const insertSql = `
               INSERT INTO jobs (
-                job_number,
-                title,
-                work_order,
-                activity,
-                location,
-                description,
-                activity_code,
-                closure_id,
-                workstream_id,
-                start_mp,
-                end_mp,
-                status,
-                planned_date,
-                notes
+                job_number, title, work_order, activity, location, description, activity_code,
+                closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes
               )
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
@@ -1328,51 +1141,33 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
             db.query(insertSql, values, (insertErr) => {
               if (insertErr) {
                 console.error("Import insert error:", insertErr);
-                return res.status(500).json({
-                  error: `Insert failed on row ${row.rowNumber}`,
-                });
+                return res.status(500).json({ error: `Insert failed on row ${row.rowNumber}` });
               }
 
               inserted += 1;
               runNext();
             });
-
             return;
           }
 
           if (row.action === "update") {
             const updateSql = `
               UPDATE jobs
-              SET
-                job_number = ?,
-                title = ?,
-                work_order = ?,
-                activity = ?,
-                location = ?,
-                description = ?,
-                activity_code = ?,
-                closure_id = ?,
-                workstream_id = ?,
-                start_mp = ?,
-                end_mp = ?,
-                status = ?,
-                planned_date = ?,
-                notes = ?
+              SET job_number = ?, title = ?, work_order = ?, activity = ?, location = ?,
+                  description = ?, activity_code = ?, closure_id = ?, workstream_id = ?,
+                  start_mp = ?, end_mp = ?, status = ?, planned_date = ?, notes = ?
               WHERE id = ?
             `;
 
             db.query(updateSql, [...values, row.existing_job_id], (updateErr) => {
               if (updateErr) {
                 console.error("Import update error:", updateErr);
-                return res.status(500).json({
-                  error: `Update failed on row ${row.rowNumber}`,
-                });
+                return res.status(500).json({ error: `Update failed on row ${row.rowNumber}` });
               }
 
               updated += 1;
               runNext();
             });
-
             return;
           }
 
@@ -1394,35 +1189,15 @@ app.get("/api/nightworks", auth, (req, res) => {
   const rangeStart = startDate || date;
   const rangeEnd = endDate || date;
 
-  if (!rangeStart || !rangeEnd) {
-    return res.status(400).json({ error: "Date range is required" });
-  }
+  if (!rangeStart || !rangeEnd) return res.status(400).json({ error: "Date range is required" });
 
   let sql = `
-    SELECT 
-      jobs.id,
-      jobs.job_number,
-      jobs.title,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      jobs.closure_id,
-      closures.closure_ref,
-      closures.closure_date,
-      closures.start_date,
-      closures.end_date,
-      closures.carriageway,
-      closures.closure_type,
-      closures.nems_number,
-      closures.junctions_between,
-      closures.lane_configuration,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.start_mp, jobs.end_mp, jobs.status,
+           jobs.planned_date, jobs.closure_id, closures.closure_ref, closures.closure_date,
+           closures.start_date, closures.end_date, closures.carriageway, closures.closure_type,
+           closures.nems_number, closures.junctions_between, closures.lane_configuration,
+           workstreams.name AS workstream
     FROM jobs
     INNER JOIN closures ON jobs.closure_id = closures.id
     INNER JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -1459,20 +1234,9 @@ app.get("/api/closures/:id/briefing", auth, (req, res) => {
   const closureSql = `SELECT * FROM closures WHERE id = ?`;
 
   const jobsSql = `
-    SELECT
-      jobs.id,
-      jobs.job_number,
-      jobs.work_order,
-      jobs.activity,
-      jobs.location,
-      jobs.description,
-      jobs.activity_code,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.planned_date,
-      jobs.notes,
-      workstreams.name AS workstream
+    SELECT jobs.id, jobs.job_number, jobs.work_order, jobs.activity, jobs.location,
+           jobs.description, jobs.activity_code, jobs.start_mp, jobs.end_mp, jobs.status,
+           jobs.planned_date, jobs.notes, workstreams.name AS workstream
     FROM jobs
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
     WHERE jobs.closure_id = ?
@@ -1513,18 +1277,9 @@ Emergency services should be contacted where required and all relevant details r
           jobs: jobsResults,
           slipRoads: slipResults.map((row) => row.slip_road_name),
           briefing: {
-            emergency:
-              closure.briefing_emergency && closure.briefing_emergency.trim() !== ""
-                ? closure.briefing_emergency
-                : defaultEmergency,
-            sequence:
-              closure.briefing_sequence && closure.briefing_sequence.trim() !== ""
-                ? closure.briefing_sequence
-                : defaultSequence,
-            generalNotes:
-              closure.briefing_general_notes && closure.briefing_general_notes.trim() !== ""
-                ? closure.briefing_general_notes
-                : defaultGeneralNotes,
+            emergency: closure.briefing_emergency && closure.briefing_emergency.trim() !== "" ? closure.briefing_emergency : defaultEmergency,
+            sequence: closure.briefing_sequence && closure.briefing_sequence.trim() !== "" ? closure.briefing_sequence : defaultSequence,
+            generalNotes: closure.briefing_general_notes && closure.briefing_general_notes.trim() !== "" ? closure.briefing_general_notes : defaultGeneralNotes,
           },
         });
       });
@@ -1537,10 +1292,7 @@ app.put("/api/closures/:id/briefing", auth, requireRole("admin", "planner"), (re
 
   const sql = `
     UPDATE closures
-    SET
-      briefing_emergency = ?,
-      briefing_sequence = ?,
-      briefing_general_notes = ?
+    SET briefing_emergency = ?, briefing_sequence = ?, briefing_general_notes = ?
     WHERE id = ?
   `;
 
@@ -1565,28 +1317,12 @@ app.get("/api/work-sheet", auth, (req, res) => {
   }
 
   const sql = `
-    SELECT
-      jobs.id,
-      jobs.job_number,
-      jobs.work_order,
-      jobs.activity,
-      jobs.activity_code,
-      jobs.location,
-      jobs.description,
-      jobs.start_mp,
-      jobs.end_mp,
-      jobs.status,
-      jobs.notes,
-      jobs.planned_date,
-      workstreams.name AS workstream,
-      closures.closure_ref,
-      closures.closure_date,
-      closures.start_date,
-      closures.end_date,
-      closures.carriageway,
-      closures.junctions_between,
-      closures.lane_configuration,
-      closures.nems_number
+    SELECT jobs.id, jobs.job_number, jobs.work_order, jobs.activity, jobs.activity_code,
+           jobs.location, jobs.description, jobs.start_mp, jobs.end_mp, jobs.status,
+           jobs.notes, jobs.planned_date, workstreams.name AS workstream,
+           closures.closure_ref, closures.closure_date, closures.start_date, closures.end_date,
+           closures.carriageway, closures.junctions_between, closures.lane_configuration,
+           closures.nems_number
     FROM jobs
     LEFT JOIN closures ON jobs.closure_id = closures.id
     LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -1606,10 +1342,10 @@ app.get("/api/work-sheet", auth, (req, res) => {
     res.json(results);
   });
 });
+
 // -----------------------------
 // Completion Workflow
 // -----------------------------
-
 app.get(
   "/api/checksheet/jobs",
   auth,
@@ -1617,44 +1353,18 @@ app.get(
   (req, res) => {
     const { date, closureId } = req.query;
 
-    if (!date || !closureId) {
-      return res.status(400).json({ error: "Date and closure are required" });
-    }
+    if (!date || !closureId) return res.status(400).json({ error: "Date and closure are required" });
 
     const sql = `
-      SELECT
-        jobs.id,
-        jobs.job_number,
-        jobs.title,
-        jobs.work_order,
-        jobs.activity,
-        jobs.location,
-        jobs.description,
-        jobs.activity_code,
-        jobs.start_mp,
-        jobs.end_mp,
-        jobs.status,
-        jobs.planned_date,
-        jobs.notes,
-        jobs.supervisor_checked,
-        jobs.supervisor_checked_by,
-        jobs.supervisor_checked_at,
-        jobs.paperwork_checked,
-        jobs.paperwork_checked_by,
-        jobs.paperwork_checked_at,
-        jobs.night_manager_checked,
-        jobs.night_manager_checked_by,
-        jobs.night_manager_checked_at,
-        jobs.lead_scheduler_checked,
-        jobs.lead_scheduler_checked_by,
-        jobs.lead_scheduler_checked_at,
-        jobs.completion_notes,
-        workstreams.name AS workstream,
-        closures.closure_ref,
-        closures.carriageway,
-        closures.junctions_between,
-        closures.lane_configuration,
-        closures.nems_number
+      SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+             jobs.description, jobs.activity_code, jobs.start_mp, jobs.end_mp, jobs.status,
+             jobs.planned_date, jobs.notes, jobs.supervisor_checked, jobs.supervisor_checked_by,
+             jobs.supervisor_checked_at, jobs.paperwork_checked, jobs.paperwork_checked_by,
+             jobs.paperwork_checked_at, jobs.night_manager_checked, jobs.night_manager_checked_by,
+             jobs.night_manager_checked_at, jobs.lead_scheduler_checked, jobs.lead_scheduler_checked_by,
+             jobs.lead_scheduler_checked_at, jobs.completion_notes, workstreams.name AS workstream,
+             closures.closure_ref, closures.carriageway, closures.junctions_between,
+             closures.lane_configuration, closures.nems_number
       FROM jobs
       LEFT JOIN closures ON jobs.closure_id = closures.id
       LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
@@ -1674,194 +1384,137 @@ app.get(
   }
 );
 
-app.put(
-  "/api/jobs/:id/supervisor-check",
-  auth,
-  requireRole("admin", "supervisor"),
-  (req, res) => {
-    const jobId = req.params.id;
-    const { supervisor_checked, paperwork_checked, completion_notes } = req.body;
+app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor"), (req, res) => {
+  const jobId = req.params.id;
+  const { supervisor_checked, paperwork_checked, completion_notes } = req.body;
 
-    if (paperwork_checked && !supervisor_checked) {
-      return res.status(400).json({
-        error: "Works must be marked complete before paperwork can be checked.",
-      });
-    }
+  if (paperwork_checked && !supervisor_checked) {
+    return res.status(400).json({ error: "Works must be marked complete before paperwork can be checked." });
+  }
 
-    const sql = `
-      UPDATE jobs
-      SET
-        supervisor_checked = ?,
+  const sql = `
+    UPDATE jobs
+    SET supervisor_checked = ?,
         supervisor_checked_by = ?,
         supervisor_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
         paperwork_checked = ?,
         paperwork_checked_by = ?,
         paperwork_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
         completion_notes = ?
+    WHERE id = ?
+  `;
+
+  db.query(
+    sql,
+    [
+      supervisor_checked ? 1 : 0,
+      supervisor_checked ? req.user.id : null,
+      supervisor_checked ? 1 : 0,
+      paperwork_checked ? 1 : 0,
+      paperwork_checked ? req.user.id : null,
+      paperwork_checked ? 1 : 0,
+      completion_notes || null,
+      jobId,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Supervisor check error:", err);
+        return res.status(500).json({ error: "Failed to save supervisor check" });
+      }
+
+      if (result.affectedRows === 0) return res.status(404).json({ error: "Job not found" });
+      res.json({ message: "Supervisor check saved" });
+    }
+  );
+});
+
+app.put("/api/jobs/:id/night-manager-check", auth, requireRole("admin", "night_manager"), (req, res) => {
+  const jobId = req.params.id;
+  const { night_manager_checked } = req.body;
+
+  db.query(`SELECT paperwork_checked FROM jobs WHERE id = ?`, [jobId], (checkErr, checkResults) => {
+    if (checkErr) {
+      console.error("Night manager pre-check error:", checkErr);
+      return res.status(500).json({ error: "Failed to check job status" });
+    }
+
+    if (checkResults.length === 0) return res.status(404).json({ error: "Job not found" });
+
+    const job = checkResults[0];
+
+    if (night_manager_checked && !job.paperwork_checked) {
+      return res.status(400).json({ error: "Paperwork must be checked first." });
+    }
+
+    const sql = `
+      UPDATE jobs
+      SET night_manager_checked = ?,
+          night_manager_checked_by = ?,
+          night_manager_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
+      WHERE id = ?
+    `;
+
+    db.query(sql, [night_manager_checked ? 1 : 0, night_manager_checked ? req.user.id : null, night_manager_checked ? 1 : 0, jobId], (err, result) => {
+      if (err) {
+        console.error("Night manager check error:", err);
+        return res.status(500).json({ error: "Failed to save night manager check" });
+      }
+
+      if (result.affectedRows === 0) return res.status(404).json({ error: "Job not found" });
+      res.json({ message: "Night manager check saved" });
+    });
+  });
+});
+
+app.put("/api/jobs/:id/lead-scheduler-check", auth, requireRole("admin", "lead_scheduler"), (req, res) => {
+  const jobId = req.params.id;
+  const { lead_scheduler_checked } = req.body;
+
+  db.query(`SELECT night_manager_checked FROM jobs WHERE id = ?`, [jobId], (checkErr, checkResults) => {
+    if (checkErr) {
+      console.error("Lead scheduler pre-check error:", checkErr);
+      return res.status(500).json({ error: "Failed to check job status" });
+    }
+
+    if (checkResults.length === 0) return res.status(404).json({ error: "Job not found" });
+
+    const job = checkResults[0];
+
+    if (lead_scheduler_checked && !job.night_manager_checked) {
+      return res.status(400).json({ error: "Manager check must be completed first." });
+    }
+
+    const sql = `
+      UPDATE jobs
+      SET lead_scheduler_checked = ?,
+          lead_scheduler_checked_by = ?,
+          lead_scheduler_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+          status = CASE WHEN ? = 1 THEN 'Complete' ELSE status END
       WHERE id = ?
     `;
 
     db.query(
       sql,
       [
-        supervisor_checked ? 1 : 0,
-        supervisor_checked ? req.user.id : null,
-        supervisor_checked ? 1 : 0,
-        paperwork_checked ? 1 : 0,
-        paperwork_checked ? req.user.id : null,
-        paperwork_checked ? 1 : 0,
-        completion_notes || null,
+        lead_scheduler_checked ? 1 : 0,
+        lead_scheduler_checked ? req.user.id : null,
+        lead_scheduler_checked ? 1 : 0,
+        lead_scheduler_checked ? 1 : 0,
         jobId,
       ],
       (err, result) => {
         if (err) {
-          console.error("Supervisor check error:", err);
-          return res.status(500).json({ error: "Failed to save supervisor check" });
+          console.error("Lead scheduler check error:", err);
+          return res.status(500).json({ error: "Failed to save lead scheduler check" });
         }
 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ error: "Job not found" });
-        }
-
-        res.json({ message: "Supervisor check saved" });
+        if (result.affectedRows === 0) return res.status(404).json({ error: "Job not found" });
+        res.json({ message: "Lead scheduler check saved" });
       }
     );
-  }
-);
+  });
+});
 
-app.put(
-  "/api/jobs/:id/night-manager-check",
-  auth,
-  requireRole("admin", "night_manager"),
-  (req, res) => {
-    const jobId = req.params.id;
-    const { night_manager_checked } = req.body;
-
-    db.query(
-      `SELECT paperwork_checked FROM jobs WHERE id = ?`,
-      [jobId],
-      (checkErr, checkResults) => {
-        if (checkErr) {
-          console.error("Night manager pre-check error:", checkErr);
-          return res.status(500).json({ error: "Failed to check job status" });
-        }
-
-        if (checkResults.length === 0) {
-          return res.status(404).json({ error: "Job not found" });
-        }
-
-        const job = checkResults[0];
-
-        if (night_manager_checked && !job.paperwork_checked) {
-          return res.status(400).json({
-            error: "Paperwork must be checked first.",
-          });
-        }
-
-        const sql = `
-          UPDATE jobs
-          SET
-            night_manager_checked = ?,
-            night_manager_checked_by = ?,
-            night_manager_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
-          WHERE id = ?
-        `;
-
-        db.query(
-          sql,
-          [
-            night_manager_checked ? 1 : 0,
-            night_manager_checked ? req.user.id : null,
-            night_manager_checked ? 1 : 0,
-            jobId,
-          ],
-          (err, result) => {
-            if (err) {
-              console.error("Night manager check error:", err);
-              return res.status(500).json({
-                error: "Failed to save night manager check",
-              });
-            }
-
-            if (result.affectedRows === 0) {
-              return res.status(404).json({ error: "Job not found" });
-            }
-
-            res.json({ message: "Night manager check saved" });
-          }
-        );
-      }
-    );
-  }
-);
-
-app.put(
-  "/api/jobs/:id/lead-scheduler-check",
-  auth,
-  requireRole("admin", "lead_scheduler"),
-  (req, res) => {
-    const jobId = req.params.id;
-    const { lead_scheduler_checked } = req.body;
-
-    db.query(
-      `SELECT night_manager_checked FROM jobs WHERE id = ?`,
-      [jobId],
-      (checkErr, checkResults) => {
-        if (checkErr) {
-          console.error("Lead scheduler pre-check error:", checkErr);
-          return res.status(500).json({ error: "Failed to check job status" });
-        }
-
-        if (checkResults.length === 0) {
-          return res.status(404).json({ error: "Job not found" });
-        }
-
-        const job = checkResults[0];
-
-        if (lead_scheduler_checked && !job.night_manager_checked) {
-          return res.status(400).json({
-            error: "Manager check must be completed first.",
-          });
-        }
-
-        const sql = `
-          UPDATE jobs
-          SET
-            lead_scheduler_checked = ?,
-            lead_scheduler_checked_by = ?,
-            lead_scheduler_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
-            status = CASE WHEN ? = 1 THEN 'Complete' ELSE status END
-          WHERE id = ?
-        `;
-
-        db.query(
-          sql,
-          [
-            lead_scheduler_checked ? 1 : 0,
-            lead_scheduler_checked ? req.user.id : null,
-            lead_scheduler_checked ? 1 : 0,
-            lead_scheduler_checked ? 1 : 0,
-            jobId,
-          ],
-          (err, result) => {
-            if (err) {
-              console.error("Lead scheduler check error:", err);
-              return res.status(500).json({
-                error: "Failed to save lead scheduler check",
-              });
-            }
-
-            if (result.affectedRows === 0) {
-              return res.status(404).json({ error: "Job not found" });
-            }
-
-            res.json({ message: "Lead scheduler check saved" });
-          }
-        );
-      }
-    );
-  }
-);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
