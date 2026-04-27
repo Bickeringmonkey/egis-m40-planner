@@ -5085,8 +5085,8 @@ button:hover {
     width: auto !important;
   }
 
-  .nightworks-print-table th:nth-child(8),
-  .nightworks-print-table td:nth-child(8) {
+  .nightworks-print-table th:nth-child(4),
+  .nightworks-print-table td:nth-child(4) {
     display: none !important;
   }
 
