@@ -389,9 +389,28 @@ function ExcelImport() {
       <div className="detail-card" style={{ marginTop: "20px" }}>
         <h2 style={{ marginTop: 0 }}>Recommended Excel Headers</h2>
         <p>
-          job_number, title, work_order, activity, location, description,
-          activity_code, start_mp, end_mp, status, planned_date, closure_ref,
-          workstream, notes
+          <div className="excel-headers">
+  {[
+    "job_number",
+    "title",
+    "work_order",
+    "activity",
+    "location",
+    "description",
+    "activity_code",
+    "start_mp",
+    "end_mp",
+    "status",
+    "planned_date",
+    "closure_ref",
+    "workstream",
+    "notes"
+  ].map((header) => (
+    <span key={header} className="header-tag">
+      {header}
+    </span>
+  ))}
+</div>
         </p>
       </div>
     </div>

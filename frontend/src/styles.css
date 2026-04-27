@@ -4373,3 +4373,20 @@ button:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.excel-headers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: #f5f7f9;
+  border-radius: 8px;
+}
+
+.header-tag {
+  background: #00617e;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
