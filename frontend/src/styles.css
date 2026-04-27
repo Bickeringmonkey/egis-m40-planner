@@ -4445,3 +4445,19 @@ button:hover {
   margin: 18px 14px 8px;
   font-size: 11px;
 }
+.excel-drop-zone {
+  border: 2px dashed #abc022;
+  border-radius: 18px;
+  padding: 28px;
+  text-align: center;
+  background: #f8fafc;
+  margin-bottom: 18px;
+}
+
+.error-list {
+  color: #b00020;
+}
+
+.warning-list {
+  color: #b26a00;
+}

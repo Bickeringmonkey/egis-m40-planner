@@ -3,25 +3,31 @@ import * as XLSX from "xlsx";
 import api from "../services/api";
 
 function ExcelImport() {
+  const [selectedFile, setSelectedFile] = useState(null);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState([]);
   const [preview, setPreview] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [validation, setValidation] = useState(null);
   const [mode, setMode] = useState("upsert");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const requiredHeaders = [
+  const standardHeaders = [
     "job_number",
+    "title",
+    "work_order",
     "activity",
     "location",
     "description",
+    "activity_code",
     "start_mp",
     "end_mp",
     "status",
     "planned_date",
     "closure_ref",
     "workstream",
+    "notes",
   ];
 
   const normaliseDate = (value) => {
@@ -31,9 +37,7 @@ function ExcelImport() {
       const parsed = XLSX.SSF.parse_date_code(value);
       if (!parsed) return "";
 
-      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(
-        parsed.d
-      ).padStart(2, "0")}`;
+      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
     }
 
     const text = String(value).trim();
@@ -63,13 +67,20 @@ function ExcelImport() {
     notes: row.notes || row.Notes || "",
   });
 
+  const resetImportState = () => {
+    setRows([]);
+    setPreview([]);
+    setSummary(null);
+    setValidation(null);
+  };
+
   const readExcelFile = async (file) => {
     try {
       setLoading(true);
       setMessage("");
+      setSelectedFile(file);
       setFileName(file.name);
-      setPreview([]);
-      setSummary(null);
+      resetImportState();
 
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
@@ -89,7 +100,7 @@ function ExcelImport() {
         return;
       }
 
-      setMessage(`Loaded ${cleaned.length} row(s) from ${firstSheetName}. Now run Preview.`);
+      setMessage(`Loaded ${cleaned.length} row(s) from ${firstSheetName}. Run validation next.`);
     } catch (err) {
       console.error(err);
       setMessage("Failed to read Excel file.");
@@ -109,9 +120,52 @@ function ExcelImport() {
     if (file) readExcelFile(file);
   };
 
+  const validateExcel = async () => {
+    if (!selectedFile) {
+      setMessage("Choose an Excel file first.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("");
+      setValidation(null);
+      setPreview([]);
+      setSummary(null);
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const res = await api.post("/import-jobs/validate", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      setValidation(res.data);
+
+      if (res.data.valid) {
+        setMessage("Validation passed. Now run Preview Import.");
+      } else {
+        setMessage("Validation failed. Fix the errors below before importing.");
+      }
+    } catch (err) {
+      console.error(err);
+      setValidation(err.response?.data || null);
+      setMessage(err.response?.data?.errors?.join("\n") || "Validation failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const runPreview = async () => {
     if (!rows.length) {
       setMessage("Upload an Excel file first.");
+      return;
+    }
+
+    if (!validation?.valid) {
+      setMessage("Validate the Excel file before previewing.");
       return;
     }
 
@@ -126,7 +180,7 @@ function ExcelImport() {
 
       setSummary(res.data.summary);
       setPreview(res.data.preview || []);
-      setMessage("Preview complete.");
+      setMessage("Preview complete. Check the rows, then commit import.");
     } catch (err) {
       console.error(err);
       setMessage(err.response?.data?.error || "Preview failed.");
@@ -141,15 +195,18 @@ function ExcelImport() {
       return;
     }
 
+    if (!validation?.valid) {
+      setMessage("Validate the Excel file before importing.");
+      return;
+    }
+
     if (summary?.errors > 0) {
       setMessage("Fix preview errors before importing.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Import jobs now?\n\nInserts: ${summary?.inserts || 0}\nUpdates: ${
-        summary?.updates || 0
-      }`
+      `Import jobs now?\n\nInserts: ${summary?.inserts || 0}\nUpdates: ${summary?.updates || 0}`
     );
 
     if (!confirmed) return;
@@ -163,12 +220,7 @@ function ExcelImport() {
         mode,
       });
 
-      setMessage(
-        `Import completed. Inserted: ${res.data.inserted || 0}. Updated: ${
-          res.data.updated || 0
-        }.`
-      );
-
+      setMessage(`Import completed. Inserted: ${res.data.inserted || 0}. Updated: ${res.data.updated || 0}.`);
       await runPreview();
     } catch (err) {
       console.error(err);
@@ -201,12 +253,6 @@ function ExcelImport() {
     return count;
   }, [rows]);
 
-  const missingHeaders = useMemo(() => {
-    if (!rows.length) return [];
-    const available = Object.keys(rows[0] || {}).map((key) => key.toLowerCase());
-    return requiredHeaders.filter((header) => !available.includes(header.toLowerCase()));
-  }, [rows]);
-
   const getActionClass = (action) => {
     if (action === "insert") return "status-badge status-planned";
     if (action === "update") return "status-badge status-complete";
@@ -220,36 +266,33 @@ function ExcelImport() {
         <div>
           <h1 className="page-title">Excel Import</h1>
           <p className="page-subtitle">
-            Drag in an Excel file, preview inserts/updates, then import safely.
+            Validate the file first, preview the changes, then import safely.
           </p>
         </div>
       </div>
 
-      {message && <pre className="form-message" style={{ whiteSpace: "pre-wrap" }}>{message}</pre>}
+      {message && (
+        <pre className="form-message" style={{ whiteSpace: "pre-wrap" }}>
+          {message}
+        </pre>
+      )}
 
       <div className="filter-card filter-card-compact">
         <div
           onDrop={handleDrop}
           onDragOver={(event) => event.preventDefault()}
-          style={{
-            border: "2px dashed #abc022",
-            borderRadius: "18px",
-            padding: "28px",
-            textAlign: "center",
-            background: "#f8fafc",
-            marginBottom: "18px",
-          }}
+          className="excel-drop-zone"
         >
-          <h2 style={{ marginTop: 0 }}>Drop Excel file here</h2>
+          <h2>Drop Excel file here</h2>
           <p>Accepted: .xlsx, .xls, .csv</p>
 
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleFileInput}
-          />
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileInput} />
 
-          {fileName && <p><strong>Selected:</strong> {fileName}</p>}
+          {fileName && (
+            <p>
+              <strong>Selected:</strong> {fileName}
+            </p>
+          )}
         </div>
 
         <div className="detail-form-grid">
@@ -277,33 +320,63 @@ function ExcelImport() {
           <button
             type="button"
             className="detail-btn detail-btn-secondary"
-            onClick={runPreview}
-            disabled={loading || !rows.length}
+            onClick={validateExcel}
+            disabled={loading || !selectedFile}
           >
-            Preview Import
+            {loading ? "Working..." : "1. Validate Excel"}
+          </button>
+
+          <button
+            type="button"
+            className="detail-btn detail-btn-secondary"
+            onClick={runPreview}
+            disabled={loading || !rows.length || !validation?.valid}
+          >
+            2. Preview Import
           </button>
 
           <button
             type="button"
             className="detail-btn"
             onClick={commitImport}
-            disabled={loading || !rows.length || !summary || summary.errors > 0}
+            disabled={loading || !rows.length || !summary || summary.errors > 0 || !validation?.valid}
           >
-            Commit Import
+            3. Commit Import
           </button>
         </div>
       </div>
 
-      {missingHeaders.length > 0 && (
+      {validation && (
         <div className="detail-card" style={{ marginBottom: "20px" }}>
-          <h2 style={{ marginTop: 0 }}>Header Check</h2>
+          <h2 style={{ marginTop: 0 }}>
+            {validation.valid ? "✅ Validation Passed" : "❌ Validation Failed"}
+          </h2>
+
           <p>
-            Missing expected headers: <strong>{missingHeaders.join(", ")}</strong>
+            <strong>Total rows checked:</strong> {validation.totalRows || 0}
           </p>
-          <p>
-            The importer can still work with some alternative names, but best
-            practice is to use the standard headers.
-          </p>
+
+          {validation.errors?.length > 0 && (
+            <>
+              <h3>Errors</h3>
+              <ul className="error-list">
+                {validation.errors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {validation.warnings?.length > 0 && (
+            <>
+              <h3>Warnings</h3>
+              <ul className="warning-list">
+                {validation.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
 
@@ -366,18 +439,14 @@ function ExcelImport() {
                   <tr key={`${row.rowNumber}-${row.job.job_number}`}>
                     <td>{row.rowNumber}</td>
                     <td>
-                      <span className={getActionClass(row.action)}>
-                        {row.action}
-                      </span>
+                      <span className={getActionClass(row.action)}>{row.action}</span>
                     </td>
                     <td>{row.job.job_number}</td>
                     <td>{row.job.closure_ref}</td>
                     <td>{row.job.workstream}</td>
                     <td>{row.job.activity}</td>
                     <td>{row.job.planned_date}</td>
-                    <td>
-                      {row.errors?.length ? row.errors.join(", ") : ""}
-                    </td>
+                    <td>{row.errors?.length ? row.errors.join(", ") : ""}</td>
                   </tr>
                 ))}
               </tbody>
@@ -387,31 +456,14 @@ function ExcelImport() {
       )}
 
       <div className="detail-card" style={{ marginTop: "20px" }}>
-        <h2 style={{ marginTop: "10px", marginLeft: "20px" }}>Recommended Excel Headers</h2>
-        <p>
-          <div className="excel-headers">
-  {[
-    "job_number",
-    "title",
-    "work_order",
-    "activity",
-    "location",
-    "description",
-    "activity_code",
-    "start_mp",
-    "end_mp",
-    "status",
-    "planned_date",
-    "closure_ref",
-    "workstream",
-    "notes"
-  ].map((header) => (
-    <span key={header} className="header-tag">
-      {header}
-    </span>
-  ))}
-</div>
-        </p>
+        <h2 style={{ marginTop: "10px" }}>Recommended Excel Headers</h2>
+        <div className="excel-headers">
+          {standardHeaders.map((header) => (
+            <span key={header} className="header-tag">
+              {header}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
