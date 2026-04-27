@@ -1091,109 +1091,295 @@ app.delete("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) =>
   });
 });
 // -----------------------------
-// IMPORT JOBS FROM EXCEL (SMART)
+// Smart Excel Job Import
 // -----------------------------
-app.post("/api/jobs/import", auth, requireRole("admin", "planner"), (req, res) => {
-  const jobs = req.body.jobs;
+function normaliseImportText(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function normaliseImportKey(value) {
+  return normaliseImportText(value).toLowerCase();
+}
+
+function buildImportJobPreview(jobs, mode, closures, workstreams, existingJobs) {
+  const closureMap = {};
+  const workstreamMap = {};
+  const existingJobMap = {};
+
+  closures.forEach((closure) => {
+    closureMap[normaliseImportKey(closure.closure_ref)] = closure.id;
+  });
+
+  workstreams.forEach((workstream) => {
+    workstreamMap[normaliseImportKey(workstream.name)] = workstream.id;
+  });
+
+  existingJobs.forEach((job) => {
+    existingJobMap[normaliseImportKey(job.job_number)] = job.id;
+  });
+
+  return jobs.map((job, index) => {
+    const rowNumber = index + 2;
+
+    const jobNumber = normaliseImportText(job.job_number);
+    const closureRef = normaliseImportText(job.closure_ref);
+    const workstreamName = normaliseImportText(job.workstream);
+
+    const closureId = closureMap[normaliseImportKey(closureRef)];
+    const workstreamId = workstreamMap[normaliseImportKey(workstreamName)];
+    const existingJobId = existingJobMap[normaliseImportKey(jobNumber)];
+
+    const errors = [];
+
+    if (!jobNumber) errors.push("Missing job_number");
+    if (!closureRef) errors.push("Missing closure_ref");
+    if (!workstreamName) errors.push("Missing workstream");
+    if (closureRef && !closureId) errors.push(`Closure not found: ${closureRef}`);
+    if (workstreamName && !workstreamId) errors.push(`Workstream not found: ${workstreamName}`);
+
+    let action = existingJobId ? "update" : "insert";
+
+    if (mode === "insert_only" && existingJobId) {
+      action = "error";
+      errors.push(`Duplicate job_number already exists: ${jobNumber}`);
+    }
+
+    if (mode === "update_existing" && !existingJobId) {
+      action = "error";
+      errors.push(`Job does not already exist: ${jobNumber}`);
+    }
+
+    if (errors.length > 0) action = "error";
+
+    return {
+      rowNumber,
+      action,
+      errors,
+      existing_job_id: existingJobId || null,
+      closure_id: closureId || null,
+      workstream_id: workstreamId || null,
+      job: {
+        job_number: jobNumber,
+        title: normaliseImportText(job.title) || null,
+        work_order: normaliseImportText(job.work_order) || null,
+        activity: normaliseImportText(job.activity) || null,
+        location: normaliseImportText(job.location) || null,
+        description: normaliseImportText(job.description) || null,
+        activity_code: normaliseImportText(job.activity_code) || null,
+        closure_ref: closureRef,
+        workstream: workstreamName,
+        start_mp: job.start_mp || null,
+        end_mp: job.end_mp || null,
+        status: normaliseImportText(job.status) || "Planned",
+        planned_date: job.planned_date || null,
+        notes: normaliseImportText(job.notes) || null,
+      },
+    };
+  });
+}
+
+app.post("/api/jobs/import/preview", auth, requireRole("admin", "planner"), (req, res) => {
+  const { jobs = [], mode = "upsert" } = req.body;
 
   if (!Array.isArray(jobs) || jobs.length === 0) {
     return res.status(400).json({ error: "No jobs provided" });
   }
 
-  const errors = [];
-  const validJobs = [];
+  db.query(`SELECT id, closure_ref FROM closures`, (closureErr, closures) => {
+    if (closureErr) {
+      console.error("Import preview closure error:", closureErr);
+      return res.status(500).json({ error: "Failed to fetch closures" });
+    }
 
-  // Step 1: get closures + workstreams
-  db.query(`SELECT id, closure_ref FROM closures`, (err1, closures) => {
-    if (err1) return res.status(500).json({ error: "Failed to fetch closures" });
-
-    db.query(`SELECT id, name FROM workstreams`, (err2, workstreams) => {
-      if (err2) return res.status(500).json({ error: "Failed to fetch workstreams" });
-
-      const closureMap = {};
-      closures.forEach(c => {
-        closureMap[c.closure_ref?.toLowerCase()] = c.id;
-      });
-
-      const workstreamMap = {};
-      workstreams.forEach(w => {
-        workstreamMap[w.name?.toLowerCase()] = w.id;
-      });
-
-      // Step 2: validate each row
-      jobs.forEach((job, index) => {
-        const rowNumber = index + 2;
-
-        const closureId = closureMap[(job.closure_ref || "").toLowerCase()];
-        const workstreamId = workstreamMap[(job.workstream || "").toLowerCase()];
-
-        if (!closureId) {
-          errors.push(`Row ${rowNumber}: Closure not found (${job.closure_ref})`);
-          return;
-        }
-
-        if (!workstreamId) {
-          errors.push(`Row ${rowNumber}: Workstream not found (${job.workstream})`);
-          return;
-        }
-
-        validJobs.push([
-          job.job_number,
-          job.title || null,
-          job.work_order || null,
-          job.activity || null,
-          job.location || null,
-          job.description || null,
-          job.activity_code || null,
-          closureId,
-          workstreamId,
-          job.start_mp || null,
-          job.end_mp || null,
-          job.status || "Planned",
-          job.planned_date || null,
-          job.notes || null,
-        ]);
-      });
-
-      // If errors → stop
-      if (errors.length > 0) {
-        return res.status(400).json({
-          error: "Import failed",
-          details: errors,
-        });
+    db.query(`SELECT id, name FROM workstreams`, (workstreamErr, workstreams) => {
+      if (workstreamErr) {
+        console.error("Import preview workstream error:", workstreamErr);
+        return res.status(500).json({ error: "Failed to fetch workstreams" });
       }
 
-      // Step 3: insert
-      const insertSql = `
-        INSERT INTO jobs (
-          job_number,
-          title,
-          work_order,
-          activity,
-          location,
-          description,
-          activity_code,
-          closure_id,
-          workstream_id,
-          start_mp,
-          end_mp,
-          status,
-          planned_date,
-          notes
-        )
-        VALUES ?
-      `;
-
-      db.query(insertSql, [validJobs], (err3, result) => {
-        if (err3) {
-          console.error(err3);
-          return res.status(500).json({ error: "Insert failed" });
+      db.query(`SELECT id, job_number FROM jobs`, (jobErr, existingJobs) => {
+        if (jobErr) {
+          console.error("Import preview existing jobs error:", jobErr);
+          return res.status(500).json({ error: "Failed to fetch existing jobs" });
         }
 
-        res.json({
-          message: "Import successful",
-          inserted: result.affectedRows,
-        });
+        const preview = buildImportJobPreview(
+          jobs,
+          mode,
+          closures,
+          workstreams,
+          existingJobs
+        );
+
+        const summary = {
+          totalRows: preview.length,
+          inserts: preview.filter((row) => row.action === "insert").length,
+          updates: preview.filter((row) => row.action === "update").length,
+          errors: preview.filter((row) => row.action === "error").length,
+        };
+
+        res.json({ summary, preview });
+      });
+    });
+  });
+});
+
+app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req, res) => {
+  const { jobs = [], mode = "upsert" } = req.body;
+
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return res.status(400).json({ error: "No jobs provided" });
+  }
+
+  db.query(`SELECT id, closure_ref FROM closures`, (closureErr, closures) => {
+    if (closureErr) {
+      console.error("Import commit closure error:", closureErr);
+      return res.status(500).json({ error: "Failed to fetch closures" });
+    }
+
+    db.query(`SELECT id, name FROM workstreams`, (workstreamErr, workstreams) => {
+      if (workstreamErr) {
+        console.error("Import commit workstream error:", workstreamErr);
+        return res.status(500).json({ error: "Failed to fetch workstreams" });
+      }
+
+      db.query(`SELECT id, job_number FROM jobs`, (jobErr, existingJobs) => {
+        if (jobErr) {
+          console.error("Import commit existing jobs error:", jobErr);
+          return res.status(500).json({ error: "Failed to fetch existing jobs" });
+        }
+
+        const preview = buildImportJobPreview(
+          jobs,
+          mode,
+          closures,
+          workstreams,
+          existingJobs
+        );
+
+        const errorRows = preview.filter((row) => row.action === "error");
+
+        if (errorRows.length > 0) {
+          return res.status(400).json({
+            error: "Import contains errors",
+            details: errorRows.map((row) => ({
+              rowNumber: row.rowNumber,
+              job_number: row.job.job_number,
+              errors: row.errors,
+            })),
+          });
+        }
+
+        let inserted = 0;
+        let updated = 0;
+        let index = 0;
+
+        const runNext = () => {
+          if (index >= preview.length) {
+            return res.json({
+              message: "Import completed",
+              inserted,
+              updated,
+            });
+          }
+
+          const row = preview[index];
+          index += 1;
+
+          const values = [
+            row.job.job_number,
+            row.job.title,
+            row.job.work_order,
+            row.job.activity,
+            row.job.location,
+            row.job.description,
+            row.job.activity_code,
+            row.closure_id,
+            row.workstream_id,
+            row.job.start_mp,
+            row.job.end_mp,
+            row.job.status,
+            row.job.planned_date,
+            row.job.notes,
+          ];
+
+          if (row.action === "insert") {
+            const insertSql = `
+              INSERT INTO jobs (
+                job_number,
+                title,
+                work_order,
+                activity,
+                location,
+                description,
+                activity_code,
+                closure_id,
+                workstream_id,
+                start_mp,
+                end_mp,
+                status,
+                planned_date,
+                notes
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            db.query(insertSql, values, (insertErr) => {
+              if (insertErr) {
+                console.error("Import insert error:", insertErr);
+                return res.status(500).json({
+                  error: `Insert failed on row ${row.rowNumber}`,
+                });
+              }
+
+              inserted += 1;
+              runNext();
+            });
+
+            return;
+          }
+
+          if (row.action === "update") {
+            const updateSql = `
+              UPDATE jobs
+              SET
+                job_number = ?,
+                title = ?,
+                work_order = ?,
+                activity = ?,
+                location = ?,
+                description = ?,
+                activity_code = ?,
+                closure_id = ?,
+                workstream_id = ?,
+                start_mp = ?,
+                end_mp = ?,
+                status = ?,
+                planned_date = ?,
+                notes = ?
+              WHERE id = ?
+            `;
+
+            db.query(updateSql, [...values, row.existing_job_id], (updateErr) => {
+              if (updateErr) {
+                console.error("Import update error:", updateErr);
+                return res.status(500).json({
+                  error: `Update failed on row ${row.rowNumber}`,
+                });
+              }
+
+              updated += 1;
+              runNext();
+            });
+
+            return;
+          }
+
+          runNext();
+        };
+
+        runNext();
       });
     });
   });
