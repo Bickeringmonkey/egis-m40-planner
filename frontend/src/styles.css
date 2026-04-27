@@ -4606,3 +4606,112 @@ button:hover {
     display: none !important;
   }
 }
+@media print {
+  table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    font-size: 8.5px !important;
+  }
+
+  th,
+  td {
+    padding: 4px 5px !important;
+    line-height: 1.15 !important;
+    vertical-align: top !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  /* Planned Date */
+  th:nth-child(1),
+  td:nth-child(1) {
+    width: 8%;
+  }
+
+  /* Closure */
+  th:nth-child(2),
+  td:nth-child(2) {
+    width: 8%;
+  }
+
+  /* Job No */
+  th:nth-child(3),
+  td:nth-child(3) {
+    width: 8%;
+  }
+
+  /* Work Order */
+  th:nth-child(4),
+  td:nth-child(4) {
+    width: 7%;
+  }
+
+  /* Activity */
+  th:nth-child(5),
+  td:nth-child(5) {
+    width: 9%;
+  }
+
+  /* Location */
+  th:nth-child(6),
+  td:nth-child(6) {
+    width: 24%;
+  }
+
+  /* Start MP */
+  th:nth-child(7),
+  td:nth-child(7) {
+    width: 5%;
+  }
+
+  /* End MP */
+  th:nth-child(8),
+  td:nth-child(8) {
+    width: 5%;
+  }
+
+  /* Description */
+  th:nth-child(9),
+  td:nth-child(9) {
+    width: 20%;
+  }
+
+  /* Status */
+  th:nth-child(10),
+  td:nth-child(10) {
+    width: 6%;
+  }
+
+  /* Stop ugly word-by-word wrapping */
+  td:nth-child(6),
+  td:nth-child(9) {
+    font-size: 8px !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+  }
+
+  .worksheet-header {
+    height: auto !important;
+    margin-bottom: 4px !important;
+  }
+
+  .worksheet-header h1 {
+    font-size: 20px !important;
+  }
+}
+@media print {
+  th:nth-child(5),
+  td:nth-child(5) {
+    display: none !important;
+  }
+
+  th:nth-child(6),
+  td:nth-child(6) {
+    width: 28%;
+  }
+
+  th:nth-child(9),
+  td:nth-child(9) {
+    width: 25%;
+  }
+}
