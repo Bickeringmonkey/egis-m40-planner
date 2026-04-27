@@ -156,68 +156,81 @@ function NightWorksPrint() {
 
   return (
     <div className="nightworks-print-page">
-      <div className="print-hide">
-        <div className="nightworks-print-actions">
-          <Link to="/nightworks" className="back-link">
-            ← Back to Night Works
-          </Link>
+      <div className="print-hide nightworks-control-card">
+  <div className="nightworks-control-top">
+    <div>
+      <Link to="/nightworks" className="back-link">
+        ← Back to Night Works
+      </Link>
 
-          <button type="button" onClick={handlePrint}>
-            Print / Save PDF
-          </button>
-        </div>
+      <h1 className="page-title">Night Works Print View</h1>
+      <p className="page-subtitle">
+        Compact operational version for printing or export.
+      </p>
+    </div>
 
-        <h1 className="page-title">Night Works Print View</h1>
-        <p className="page-subtitle">Compact operational version for printing or export.</p>
+    <button
+      type="button"
+      className="primary-action-btn"
+      onClick={handlePrint}
+    >
+      Print / Save PDF
+    </button>
+  </div>
 
-        <div className="card">
-          <div className="nightworks-filters">
-            <div className="form-group">
-              <label htmlFor="print-start-date">Start Date</label>
-              <input
-                id="print-start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  if (!endDate) setEndDate(e.target.value);
-                }}
-              />
-            </div>
+  <div className="nightworks-filter-row">
+    <div className="form-group">
+      <label htmlFor="print-start-date">Start Date</label>
+      <input
+        id="print-start-date"
+        type="date"
+        value={startDate}
+        onChange={(e) => {
+          setStartDate(e.target.value);
+          if (!endDate) setEndDate(e.target.value);
+        }}
+      />
+    </div>
 
-            <div className="form-group">
-              <label htmlFor="print-end-date">End Date</label>
-              <input
-                id="print-end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
+    <div className="form-group">
+      <label htmlFor="print-end-date">End Date</label>
+      <input
+        id="print-end-date"
+        type="date"
+        value={endDate}
+        onChange={(e) => setEndDate(e.target.value)}
+      />
+    </div>
 
-            <div className="form-group">
-              <label htmlFor="print-closure">Closure</label>
-              <select
-                id="print-closure"
-                value={closureId}
-                onChange={(e) => setClosureId(e.target.value)}
-              >
-                <option value="">All Closures</option>
-                {closures.map((closure) => (
-                  <option key={closure.id} value={closure.id}>
-                    {closure.closure_ref} - {getClosureDateLabel(closure)}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <div className="form-group">
+      <label htmlFor="print-closure">Closure</label>
+      <select
+        id="print-closure"
+        value={closureId}
+        onChange={(e) => setClosureId(e.target.value)}
+      >
+        <option value="">All Closures</option>
+        {closures.map((closure) => (
+          <option key={closure.id} value={closure.id}>
+            {closure.closure_ref} - {getClosureDateLabel(closure)}
+          </option>
+        ))}
+      </select>
+    </div>
 
-            <div className="filter-actions">
-              <button onClick={handleLoad}>Load Print View</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="filter-actions">
+      <button
+        type="button"
+        className="detail-btn"
+        onClick={handleLoad}
+      >
+        Load Print View
+      </button>
+    </div>
+  </div>
+</div>
 
+       
       <div className="nightworks-print-sheet">
         <div className="nightworks-print-header">
           <div className="nightworks-print-brand">
