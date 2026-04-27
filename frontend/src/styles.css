@@ -4786,3 +4786,112 @@ button:hover {
     text-align: center;
   }
 }
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  .nightworks-summary,
+  .workstream-totals,
+  .dashboard-kpi-grid {
+    display: none !important;
+  }
+
+  .nightworks-print-page {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .nightworks-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    border-bottom: 3px solid #abc022 !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .nightworks-header img {
+    max-height: 34px !important;
+  }
+
+  .nightworks-title h1 {
+    font-size: 20px !important;
+    margin: 0 !important;
+  }
+
+  .nightworks-title p {
+    font-size: 10px !important;
+    margin: 2px 0 0 !important;
+  }
+
+  .nightworks-meta {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+    border: 1px solid #ccd6dd !important;
+    border-radius: 8px !important;
+    padding: 6px 10px !important;
+    margin-bottom: 8px !important;
+    font-size: 10px !important;
+  }
+
+  .closure-print-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 1px solid #ccd6dd !important;
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    overflow: hidden !important;
+  }
+
+  .closure-print-card h2 {
+    font-size: 14px !important;
+    margin: 0 !important;
+    padding: 6px 8px 2px !important;
+  }
+
+  .closure-print-card p {
+    font-size: 9px !important;
+    margin: 0 !important;
+    padding: 0 8px 6px !important;
+  }
+
+  .closure-print-card table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 8.5px !important;
+  }
+
+  .closure-print-card th,
+  .closure-print-card td {
+    border: 1px solid #d7dee5 !important;
+    padding: 4px !important;
+    line-height: 1.15 !important;
+    vertical-align: top !important;
+  }
+
+  .closure-print-card th {
+    background: #f1f5f8 !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+  }
+
+  .closure-print-card tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .closure-print-card thead {
+    display: table-header-group !important;
+  }
+
+  .status-badge {
+    padding: 2px 6px !important;
+    font-size: 8px !important;
+    border-radius: 999px !important;
+  }
+}
