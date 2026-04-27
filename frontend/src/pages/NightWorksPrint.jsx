@@ -29,11 +29,7 @@ function NightWorksPrint() {
     }
   };
 
-  const fetchNightWorks = async (
-    selectedStartDate,
-    selectedEndDate,
-    selectedClosureId
-  ) => {
+  const fetchNightWorks = async (selectedStartDate, selectedEndDate, selectedClosureId) => {
     try {
       setLoading(true);
       setError("");
@@ -152,26 +148,16 @@ function NightWorksPrint() {
 
     return Object.entries(totals)
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, count]) => ({
-        name,
-        count,
-      }));
+      .map(([name, count]) => ({ name, count }));
   }, [nightWorks]);
 
   const totalJobs = nightWorks.length;
   const totalClosures = groupedNightWorks.length;
 
   return (
-    <div className="nightworks-page print-page">
+    <div className="nightworks-print-page">
       <div className="print-hide">
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            marginBottom: "16px",
-            flexWrap: "wrap",
-          }}
-        >
+        <div className="nightworks-print-actions">
           <Link to="/nightworks" className="back-link">
             ← Back to Night Works
           </Link>
@@ -182,10 +168,7 @@ function NightWorksPrint() {
         </div>
 
         <h1 className="page-title">Night Works Print View</h1>
-
-        <p className="page-subtitle">
-          Compact operational version for printing or export.
-        </p>
+        <p className="page-subtitle">Compact operational version for printing or export.</p>
 
         <div className="card">
           <div className="nightworks-filters">
@@ -235,107 +218,72 @@ function NightWorksPrint() {
         </div>
       </div>
 
-      <div className="print-header">
-        <div className="print-brand-row">
-          <img src={logo} alt="Egis Road Operations" className="print-logo" />
+      <div className="nightworks-print-sheet">
+        <div className="nightworks-print-header">
+          <div className="nightworks-print-brand">
+            <img src={logo} alt="Egis Road Operations" />
+          </div>
 
-          <div className="print-brand-text">
+          <div className="nightworks-print-title">
             <h1>M40 Night Works Programme</h1>
             <p>Operational Planning Output</p>
           </div>
         </div>
 
-        <div className="print-meta-grid">
-          <div>
-            <strong>Date Range:</strong> {formatDateRange()}
-          </div>
-
-          <div>
-            <strong>Generated:</strong> {formatDateTime(generatedAt)}
-          </div>
-
-          <div>
-            <strong>Closures:</strong> {totalClosures}
-          </div>
-
-          <div>
-            <strong>Total Jobs:</strong> {totalJobs}
+        <div className="nightworks-print-meta">
+          <div><strong>Date Range:</strong> {formatDateRange()}</div>
+          <div><strong>Generated:</strong> {formatDateTime(generatedAt)}</div>
+          <div><strong>Closures:</strong> {totalClosures}</div>
+          <div><strong>Total Jobs:</strong> {totalJobs}</div>
+          <div className="nightworks-print-workstreams">
+            <strong>Workstreams:</strong>{" "}
+            {workstreamTotals.length
+              ? workstreamTotals.map((item) => `${item.name} (${item.count})`).join(", ")
+              : "None"}
           </div>
         </div>
-      </div>
 
-      {!loading && !error && (
-        <>
-          <div
-            className="dashboard-grid print-hide"
-            style={{ marginBottom: "20px" }}
-          >
-            <div className="stat-card">
-              <h3>Closures</h3>
-              <p>{totalClosures}</p>
-            </div>
+        {loading && <p>Loading night works...</p>}
+        {error && <p>{error}</p>}
 
-            <div className="stat-card">
-              <h3>Total Jobs</h3>
-              <p>{totalJobs}</p>
-            </div>
+        {!loading && !error && groupedNightWorks.length === 0 && (
+          <div className="card">
+            <p>No jobs found for this selection.</p>
           </div>
+        )}
 
-          {workstreamTotals.length > 0 && (
-            <div className="card print-workstream-card">
-              <h2 style={{ marginTop: 0 }}>Workstream Totals</h2>
+        {!loading &&
+          !error &&
+          groupedNightWorks.map((group) => (
+            <div key={group.closure_id} className="nightworks-closure-print-card">
+              <div className="nightworks-closure-print-header">
+                <div>
+                  <h2>{group.closure_ref}</h2>
+                  <p>
+                    {getClosureDateLabel(group)} | {group.carriageway} | {group.closure_type || "Closure"}
+                  </p>
+                </div>
 
-              <div className="dashboard-grid" style={{ marginBottom: 0 }}>
-                {workstreamTotals.map((item) => (
-                  <div key={item.name} className="stat-card">
-                    <h3>{item.name}</h3>
-                    <p>{item.count}</p>
-                  </div>
-                ))}
+                <div>
+                  <p>
+                    <strong>NEMS:</strong> {group.nems_number || "None"} |{" "}
+                    <strong>Junctions:</strong> {group.junctions_between || "None"} |{" "}
+                    <strong>Lane:</strong> {group.lane_configuration || "None"}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
 
-      {loading && <p>Loading night works...</p>}
-      {error && <p>{error}</p>}
-
-      {!loading && !error && groupedNightWorks.length === 0 && (
-        <div className="card">
-          <p>No jobs found for this selection.</p>
-        </div>
-      )}
-
-      {!loading &&
-        !error &&
-        groupedNightWorks.map((group) => (
-          <div key={group.closure_id} className="print-closure-block">
-            <div className="print-closure-meta">
-              <h2>{group.closure_ref}</h2>
-
-              <p>
-                {getClosureDateLabel(group)} | {group.carriageway} |{" "}
-                {group.closure_type || "Closure"}
-              </p>
-
-              <p>
-                NEMS: {group.nems_number || "None"} | Junctions:{" "}
-                {group.junctions_between || "None"} | Lane:{" "}
-                {group.lane_configuration || "None"}
-              </p>
-            </div>
-
-            <div className="table-wrapper">
-              <table className="print-table">
+              <table className="nightworks-print-table">
                 <thead>
                   <tr>
-                    <th>Planned Date</th>
+                    <th>Date</th>
                     <th>Job No</th>
-                    <th>Work Order</th>
+                    <th>WO</th>
                     <th>Activity</th>
                     <th>Location</th>
-                    <th>Workstream</th>
+                    <th>Start MP</th>
+                    <th>End MP</th>
+                    <th>Description</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -348,24 +296,23 @@ function NightWorksPrint() {
                       <td>{job.work_order || ""}</td>
                       <td>{job.activity || job.title || ""}</td>
                       <td>{job.location || ""}</td>
-                      <td>{job.workstream}</td>
-
+                      <td>{job.start_mp || ""}</td>
+                      <td>{job.end_mp || ""}</td>
+                      <td>{job.description || ""}</td>
                       <td>
-                        <span className={getStatusClass(job.status)}>
-                          {job.status}
-                        </span>
+                        <span className={getStatusClass(job.status)}>{job.status}</span>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        ))}
+          ))}
 
-      <div className="print-footer">
-        <div>Generated from M40 Planner</div>
-        <div>Night Works Programme</div>
+        <div className="nightworks-print-footer">
+          <div>Generated from M40 Planner</div>
+          <div>Night Works Programme</div>
+        </div>
       </div>
     </div>
   );
