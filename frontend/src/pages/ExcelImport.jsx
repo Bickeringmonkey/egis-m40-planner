@@ -387,7 +387,7 @@ function ExcelImport() {
       )}
 
       <div className="detail-card" style={{ marginTop: "20px" }}>
-        <h2 style={{ marginTop: 0 }}>Recommended Excel Headers</h2>
+        <h2 style={{ marginTop: "10px", marginLeft: "20px" }}>Recommended Excel Headers</h2>
         <p>
           <div className="excel-headers">
   {[
