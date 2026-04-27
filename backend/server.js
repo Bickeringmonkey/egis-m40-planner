@@ -1090,6 +1090,114 @@ app.delete("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) =>
     res.json({ message: "Job deleted successfully" });
   });
 });
+// -----------------------------
+// IMPORT JOBS FROM EXCEL (SMART)
+// -----------------------------
+app.post("/api/jobs/import", auth, requireRole("admin", "planner"), (req, res) => {
+  const jobs = req.body.jobs;
+
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return res.status(400).json({ error: "No jobs provided" });
+  }
+
+  const errors = [];
+  const validJobs = [];
+
+  // Step 1: get closures + workstreams
+  db.query(`SELECT id, closure_ref FROM closures`, (err1, closures) => {
+    if (err1) return res.status(500).json({ error: "Failed to fetch closures" });
+
+    db.query(`SELECT id, name FROM workstreams`, (err2, workstreams) => {
+      if (err2) return res.status(500).json({ error: "Failed to fetch workstreams" });
+
+      const closureMap = {};
+      closures.forEach(c => {
+        closureMap[c.closure_ref?.toLowerCase()] = c.id;
+      });
+
+      const workstreamMap = {};
+      workstreams.forEach(w => {
+        workstreamMap[w.name?.toLowerCase()] = w.id;
+      });
+
+      // Step 2: validate each row
+      jobs.forEach((job, index) => {
+        const rowNumber = index + 2;
+
+        const closureId = closureMap[(job.closure_ref || "").toLowerCase()];
+        const workstreamId = workstreamMap[(job.workstream || "").toLowerCase()];
+
+        if (!closureId) {
+          errors.push(`Row ${rowNumber}: Closure not found (${job.closure_ref})`);
+          return;
+        }
+
+        if (!workstreamId) {
+          errors.push(`Row ${rowNumber}: Workstream not found (${job.workstream})`);
+          return;
+        }
+
+        validJobs.push([
+          job.job_number,
+          job.title || null,
+          job.work_order || null,
+          job.activity || null,
+          job.location || null,
+          job.description || null,
+          job.activity_code || null,
+          closureId,
+          workstreamId,
+          job.start_mp || null,
+          job.end_mp || null,
+          job.status || "Planned",
+          job.planned_date || null,
+          job.notes || null,
+        ]);
+      });
+
+      // If errors → stop
+      if (errors.length > 0) {
+        return res.status(400).json({
+          error: "Import failed",
+          details: errors,
+        });
+      }
+
+      // Step 3: insert
+      const insertSql = `
+        INSERT INTO jobs (
+          job_number,
+          title,
+          work_order,
+          activity,
+          location,
+          description,
+          activity_code,
+          closure_id,
+          workstream_id,
+          start_mp,
+          end_mp,
+          status,
+          planned_date,
+          notes
+        )
+        VALUES ?
+      `;
+
+      db.query(insertSql, [validJobs], (err3, result) => {
+        if (err3) {
+          console.error(err3);
+          return res.status(500).json({ error: "Insert failed" });
+        }
+
+        res.json({
+          message: "Import successful",
+          inserted: result.affectedRows,
+        });
+      });
+    });
+  });
+});
 
 // -----------------------------
 // Night works
