@@ -5006,7 +5006,7 @@ button:hover {
 
   .nightworks-print-table th {
     background: #eef3f6 !important;
-    font-size: 7.5px !important;
+    font-size: 6px !important;
     font-weight: 700 !important;
     color: #09212c !important;
   }
@@ -5085,6 +5085,10 @@ button:hover {
     width: auto !important;
   }
 
+  .nightworks-print-table th:nth-child(1),
+  .nightworks-print-table td:nth-child(1) {
+    display: none !important;
+  }
   .nightworks-print-table th:nth-child(4),
   .nightworks-print-table td:nth-child(4) {
     display: none !important;
