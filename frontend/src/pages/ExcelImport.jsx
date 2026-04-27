@@ -253,6 +253,34 @@ function ExcelImport() {
     return count;
   }, [rows]);
 
+  const downloadTemplate = () => {
+    const exampleRow = {
+      job_number: "SRMD00001",
+      title: "Defect",
+      work_order: "7343",
+      activity: "Structures",
+      location: "MP 145.30 Hill House Farm",
+      description: "Upright to west span south parapet",
+      activity_code: "STRUCT",
+      start_mp: "145.3",
+      end_mp: "146.5",
+      status: "Planned",
+      planned_date: "2026-04-27",
+      closure_ref: "CRM-A-01",
+      workstream: "Structures",
+      notes: "Example row - delete before importing",
+    };
+
+    const worksheet = XLSX.utils.json_to_sheet([exampleRow], {
+      header: standardHeaders,
+    });
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Jobs Import Template");
+
+    XLSX.writeFile(workbook, "m40_jobs_import_template.xlsx");
+  };
+
   const getActionClass = (action) => {
     if (action === "insert") return "status-badge status-planned";
     if (action === "update") return "status-badge status-complete";
@@ -317,6 +345,13 @@ function ExcelImport() {
         </div>
 
         <div className="detail-form-actions">
+          <button
+            type="button"
+            className="detail-btn detail-btn-secondary"
+            onClick={downloadTemplate}
+          >
+            Download Excel Template
+          </button>
           <button
             type="button"
             className="detail-btn detail-btn-secondary"
