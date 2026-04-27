@@ -9,6 +9,7 @@ import {
   ClipboardList,
   ShieldCheck,
   CheckCircle2,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import Dashboard from "./pages/Dashboard";
@@ -29,6 +30,7 @@ import WorkSheet from "./pages/WorkSheet";
 import NightManagerReview from "./pages/NightManagerReview";
 import LeadSchedulerReview from "./pages/LeadSchedulerReview";
 import Checksheet from "./pages/Checksheet";
+import ExcelImport from "./pages/ExcelImport";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -105,6 +107,12 @@ function AppShell() {
     {
       title: "Admin",
       items: [
+        {
+          to: "/excel-import",
+          label: "Excel Import",
+          icon: FileSpreadsheet,
+          roles: ["admin", "planner"],
+        },
         {
           to: "/admin/users",
           label: "Users",
@@ -328,6 +336,15 @@ function AppShell() {
             element={
               <ProtectedRoute roles={["admin", "lead_scheduler"]}>
                 <LeadSchedulerReview />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/excel-import"
+            element={
+              <ProtectedRoute roles={["admin", "planner"]}>
+                <ExcelImport />
               </ProtectedRoute>
             }
           />
