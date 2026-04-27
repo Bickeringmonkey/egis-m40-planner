@@ -4719,3 +4719,70 @@ button:hover {
     width: 25%;
   }
 }
+@media print {
+  table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    font-size: 8.5px !important;
+  }
+
+  th,
+  td {
+    padding: 4px 4px !important;
+    line-height: 1.15 !important;
+    vertical-align: top !important;
+  }
+
+  /* Planned Date */
+  th:nth-child(1),
+  td:nth-child(1) {
+    width: 8%;
+  }
+
+  /* Job No */
+  th:nth-child(2),
+  td:nth-child(2) {
+    width: 10%;
+  }
+
+  /* Work Order */
+  th:nth-child(3),
+  td:nth-child(3) {
+    width: 8%;
+  }
+
+  /* Location */
+  th:nth-child(4),
+  td:nth-child(4) {
+    width: 22%;
+  }
+
+  /* Start MP */
+  th:nth-child(5),
+  td:nth-child(5) {
+    width: 5%;
+    text-align: center;
+  }
+
+  /* End MP */
+  th:nth-child(6),
+  td:nth-child(6) {
+    width: 5%;
+    text-align: center;
+  }
+
+  /* Description (MAKE THIS BIG) */
+  th:nth-child(7),
+  td:nth-child(7) {
+    width: 32%;
+    font-size: 8px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Status */
+  th:nth-child(8),
+  td:nth-child(8) {
+    width: 6%;
+    text-align: center;
+  }
+}
