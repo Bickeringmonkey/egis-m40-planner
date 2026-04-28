@@ -1204,6 +1204,7 @@ app.get("/api/nightworks", auth, (req, res) => {
     WHERE jobs.planned_date BETWEEN ? AND ?
       AND COALESCE(closures.start_date, closures.closure_date) <= ?
       AND COALESCE(closures.end_date, closures.closure_date) >= ?
+      AND LOWER(COALESCE(jobs.status, '')) NOT IN ('complete', 'completed', 'cancelled', 'canceled')
   `;
 
   const params = [rangeStart, rangeEnd, rangeEnd, rangeStart];
@@ -1330,6 +1331,7 @@ app.get("/api/work-sheet", auth, (req, res) => {
       AND jobs.workstream_id = ?
       AND COALESCE(closures.start_date, closures.closure_date) <= ?
       AND COALESCE(closures.end_date, closures.closure_date) >= ?
+      AND LOWER(COALESCE(jobs.status, '')) NOT IN ('complete', 'completed', 'cancelled', 'canceled')
     ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
   `;
 
