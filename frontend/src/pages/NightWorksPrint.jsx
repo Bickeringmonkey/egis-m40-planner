@@ -12,8 +12,32 @@ function NightWorksPrint() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [visibleColumns, setVisibleColumns] = useState({
+    date: false,
+    jobNo: true,
+    workOrder: true,
+    activity: false,
+    location: true,
+    startMp: true,
+    endMp: true,
+    description: true,
+    status: false,
+  });
+
   const generatedAt = new Date();
   const effectiveEndDate = endDate || startDate;
+
+  const columnOptions = [
+    { key: "date", label: "Date" },
+    { key: "jobNo", label: "Job No" },
+    { key: "workOrder", label: "WO" },
+    { key: "activity", label: "Activity" },
+    { key: "location", label: "Location" },
+    { key: "startMp", label: "Start MP" },
+    { key: "endMp", label: "End MP" },
+    { key: "description", label: "Description" },
+    { key: "status", label: "Status" },
+  ];
 
   useEffect(() => {
     fetchClosures();
@@ -63,6 +87,13 @@ function NightWorksPrint() {
     window.print();
   };
 
+  const toggleColumn = (key) => {
+    setVisibleColumns((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "";
     return new Date(dateString).toLocaleDateString("en-GB");
@@ -103,10 +134,12 @@ function NightWorksPrint() {
 
   const getStatusClass = (status) => {
     if (!status) return "status-badge";
-    const clean = status.toLowerCase();
+    const clean = status.toLowerCase().trim();
+
     if (clean === "planned") return "status-badge status-planned";
-    if (clean === "complete") return "status-badge status-complete";
-    if (clean === "cancelled") return "status-badge status-cancelled";
+    if (clean === "complete" || clean === "completed") return "status-badge status-complete";
+    if (clean === "cancelled" || clean === "canceled") return "status-badge status-cancelled";
+
     return "status-badge";
   };
 
@@ -157,80 +190,95 @@ function NightWorksPrint() {
   return (
     <div className="nightworks-print-page">
       <div className="print-hide nightworks-control-card">
-  <div className="nightworks-control-top">
-    <div>
-      <Link to="/nightworks" className="back-link">
-        ← Back to Night Works
-      </Link>
+        <div className="nightworks-control-top">
+          <div>
+            <Link to="/nightworks" className="back-link">
+              ← Back to Night Works
+            </Link>
 
-      <h1 className="page-title">Night Works Print View</h1>
-      <p className="page-subtitle">
-        Compact operational version for printing or export.
-      </p>
-    </div>
+            <h1 className="page-title">Night Works Print View</h1>
+            <p className="page-subtitle">
+              Compact operational version for printing or export.
+            </p>
+          </div>
 
-    <button
-      type="button"
-      className="primary-action-btn"
-      onClick={handlePrint}
-    >
-      Print / Save PDF
-    </button>
-  </div>
+          <button
+            type="button"
+            className="primary-action-btn"
+            onClick={handlePrint}
+          >
+            Print / Save PDF
+          </button>
+        </div>
 
-  <div className="nightworks-filter-row">
-    <div className="form-group">
-      <label htmlFor="print-start-date">Start Date</label>
-      <input
-        id="print-start-date"
-        type="date"
-        value={startDate}
-        onChange={(e) => {
-          setStartDate(e.target.value);
-          if (!endDate) setEndDate(e.target.value);
-        }}
-      />
-    </div>
+        <div className="nightworks-filter-row">
+          <div className="form-group">
+            <label htmlFor="print-start-date">Start Date</label>
+            <input
+              id="print-start-date"
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (!endDate) setEndDate(e.target.value);
+              }}
+            />
+          </div>
 
-    <div className="form-group">
-      <label htmlFor="print-end-date">End Date</label>
-      <input
-        id="print-end-date"
-        type="date"
-        value={endDate}
-        onChange={(e) => setEndDate(e.target.value)}
-      />
-    </div>
+          <div className="form-group">
+            <label htmlFor="print-end-date">End Date</label>
+            <input
+              id="print-end-date"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
 
-    <div className="form-group">
-      <label htmlFor="print-closure">Closure</label>
-      <select
-        id="print-closure"
-        value={closureId}
-        onChange={(e) => setClosureId(e.target.value)}
-      >
-        <option value="">All Closures</option>
-        {closures.map((closure) => (
-          <option key={closure.id} value={closure.id}>
-            {closure.closure_ref} - {getClosureDateLabel(closure)}
-          </option>
-        ))}
-      </select>
-    </div>
+          <div className="form-group">
+            <label htmlFor="print-closure">Closure</label>
+            <select
+              id="print-closure"
+              value={closureId}
+              onChange={(e) => setClosureId(e.target.value)}
+            >
+              <option value="">All Closures</option>
+              {closures.map((closure) => (
+                <option key={closure.id} value={closure.id}>
+                  {closure.closure_ref} - {getClosureDateLabel(closure)}
+                </option>
+              ))}
+            </select>
+          </div>
 
-    <div className="filter-actions">
-      <button
-        type="button"
-        className="detail-btn"
-        onClick={handleLoad}
-      >
-        Load Print View
-      </button>
-    </div>
-  </div>
-</div>
+          <div className="filter-actions">
+            <button type="button" className="detail-btn" onClick={handleLoad}>
+              Load Print View
+            </button>
+          </div>
+        </div>
 
-       
+        <div className="nightworks-column-picker">
+          <div>
+            <strong>Print Columns</strong>
+            <p>Select what appears on the printed programme.</p>
+          </div>
+
+          <div className="nightworks-column-options">
+            {columnOptions.map((column) => (
+              <label key={column.key} className="nightworks-column-option">
+                <input
+                  type="checkbox"
+                  checked={visibleColumns[column.key]}
+                  onChange={() => toggleColumn(column.key)}
+                />
+                <span>{column.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="nightworks-print-sheet">
         <div className="nightworks-print-header">
           <div className="nightworks-print-brand">
@@ -273,7 +321,8 @@ function NightWorksPrint() {
                 <div>
                   <h2>{group.closure_ref}</h2>
                   <p>
-                    {getClosureDateLabel(group)} | {group.carriageway} | {group.closure_type || "Closure"}
+                    {getClosureDateLabel(group)} | {group.carriageway} |{" "}
+                    {group.closure_type || "Closure"}
                   </p>
                 </div>
 
@@ -289,32 +338,36 @@ function NightWorksPrint() {
               <table className="nightworks-print-table">
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Job No</th>
-                    <th>WO</th>
-                    <th>Activity</th>
-                    <th>Location</th>
-                    <th>Start MP</th>
-                    <th>End MP</th>
-                    <th>Description</th>
-                    <th>Status</th>
+                    {visibleColumns.date && <th>Date</th>}
+                    {visibleColumns.jobNo && <th>Job No</th>}
+                    {visibleColumns.workOrder && <th>WO</th>}
+                    {visibleColumns.activity && <th>Activity</th>}
+                    {visibleColumns.location && <th>Location</th>}
+                    {visibleColumns.startMp && <th>Start MP</th>}
+                    {visibleColumns.endMp && <th>End MP</th>}
+                    {visibleColumns.description && <th>Description</th>}
+                    {visibleColumns.status && <th>Status</th>}
                   </tr>
                 </thead>
 
                 <tbody>
                   {group.jobs.map((job) => (
                     <tr key={job.id}>
-                      <td>{formatDate(job.planned_date)}</td>
-                      <td>{job.job_number}</td>
-                      <td>{job.work_order || ""}</td>
-                      <td>{job.activity || job.title || ""}</td>
-                      <td>{job.location || ""}</td>
-                      <td>{job.start_mp || ""}</td>
-                      <td>{job.end_mp || ""}</td>
-                      <td>{job.description || ""}</td>
-                      <td>
-                        <span className={getStatusClass(job.status)}>{job.status}</span>
-                      </td>
+                      {visibleColumns.date && <td>{formatDate(job.planned_date)}</td>}
+                      {visibleColumns.jobNo && <td>{job.job_number}</td>}
+                      {visibleColumns.workOrder && <td>{job.work_order || ""}</td>}
+                      {visibleColumns.activity && <td>{job.activity || job.title || ""}</td>}
+                      {visibleColumns.location && <td>{job.location || ""}</td>}
+                      {visibleColumns.startMp && <td>{job.start_mp || ""}</td>}
+                      {visibleColumns.endMp && <td>{job.end_mp || ""}</td>}
+                      {visibleColumns.description && <td>{job.description || ""}</td>}
+                      {visibleColumns.status && (
+                        <td>
+                          <span className={getStatusClass(job.status)}>
+                            {job.status}
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

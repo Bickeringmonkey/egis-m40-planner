@@ -2952,3 +2952,41 @@ tbody tr:nth-child(even),
     display: none !important;
   }
 }
+.nightworks-column-picker {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #dbe4ea;
+}
+
+.nightworks-column-picker strong {
+  color: #09212c;
+}
+
+.nightworks-column-picker p {
+  margin: 4px 0 12px;
+  color: #6c7a86;
+}
+
+.nightworks-column-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nightworks-column-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f6f9fb;
+  border: 1px solid #dbe4ea;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nightworks-column-option input {
+  width: auto;
+  margin: 0;
+}
