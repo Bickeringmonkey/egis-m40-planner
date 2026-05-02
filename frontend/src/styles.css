@@ -3066,3 +3066,89 @@ tbody tr:nth-child(even),
     height: 22px !important;
   }
 }
+.nightworks-toggle-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.nightworks-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #f6f9fb;
+  border: 1px solid #dbe4ea;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 800;
+  color: #09212c;
+  cursor: pointer;
+}
+
+.nightworks-toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.nightworks-hidden-count {
+  background: #eef3f6;
+  border: 1px solid #cfd8df;
+  color: #09212c;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.nightworks-risk-count {
+  background: #fff1f0;
+  border: 1px solid #ffb4ad;
+  color: #a8071a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.nightworks-row-risk td {
+  background: #fff1f0 !important;
+  border-color: #ffccc7 !important;
+  font-weight: 700;
+}
+
+.nightworks-row-risk td:first-child {
+  border-left: 5px solid #d92d20 !important;
+}
+
+.nightworks-row-muted td {
+  background: #f3f4f6 !important;
+  color: #6b7280 !important;
+}
+
+@media print {
+  .nightworks-toggle-row {
+    display: none !important;
+  }
+
+  .nightworks-row-risk td {
+    background: #fff1f0 !important;
+    border-color: #ffccc7 !important;
+    font-weight: 700 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .nightworks-row-risk td:first-child {
+    border-left: 4px solid #d92d20 !important;
+  }
+
+  .nightworks-row-muted td {
+    background: #f3f4f6 !important;
+    color: #666 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

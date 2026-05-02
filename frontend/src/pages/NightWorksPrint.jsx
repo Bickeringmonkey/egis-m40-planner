@@ -60,6 +60,7 @@ function NightWorksPrint() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [printMode, setPrintMode] = useState("supervisor");
+  const [hideCompleted, setHideCompleted] = useState(true);
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem("nightworksPrintColumns");
@@ -208,10 +209,77 @@ function NightWorksPrint() {
     return `${formatDate(closureStart)} - ${formatDate(closureEnd)}`;
   };
 
-  const getStatusClass = (status) => {
-    if (!status) return "status-badge";
-    const clean = status.toLowerCase().trim();
+  const getCleanStatus = (status) => {
+    return String(status || "").toLowerCase().trim();
+  };
 
+  const isCompletedOrCancelled = (job) => {
+    const status = getCleanStatus(job.status);
+
+    return (
+      status === "complete" ||
+      status === "completed" ||
+      status === "cancelled" ||
+      status === "canceled"
+    );
+  };
+
+  const isRiskJob = (job) => {
+    const status = getCleanStatus(job.status);
+
+    const searchableText = [
+      job.priority,
+      job.risk,
+      job.notes,
+      job.description,
+      job.title,
+      job.activity,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const hasRiskText =
+      searchableText.includes("high risk") ||
+      searchableText.includes("urgent") ||
+      searchableText.includes("critical") ||
+      searchableText.includes("priority") ||
+      searchableText.includes("must do") ||
+      searchableText.includes("safety");
+
+    const todayOnly = new Date();
+    todayOnly.setHours(0, 0, 0, 0);
+
+    const plannedDate = job.planned_date ? new Date(job.planned_date) : null;
+
+    if (plannedDate) {
+      plannedDate.setHours(0, 0, 0, 0);
+    }
+
+    const isOverdue =
+      plannedDate &&
+      plannedDate < todayOnly &&
+      !isCompletedOrCancelled(job);
+
+    return (
+      hasRiskText ||
+      isOverdue ||
+      status === "high risk" ||
+      status === "urgent" ||
+      status === "critical"
+    );
+  };
+
+  const getJobRowClass = (job) => {
+    if (isCompletedOrCancelled(job)) return "nightworks-row-muted";
+    if (isRiskJob(job)) return "nightworks-row-risk";
+    return "";
+  };
+
+  const getStatusClass = (status) => {
+    const clean = getCleanStatus(status);
+
+    if (!clean) return "status-badge";
     if (clean === "planned") return "status-badge status-planned";
     if (clean === "complete" || clean === "completed") {
       return "status-badge status-complete";
@@ -223,10 +291,15 @@ function NightWorksPrint() {
     return "status-badge";
   };
 
+  const visibleNightWorks = useMemo(() => {
+    if (!hideCompleted) return nightWorks;
+    return nightWorks.filter((job) => !isCompletedOrCancelled(job));
+  }, [nightWorks, hideCompleted]);
+
   const groupedNightWorks = useMemo(() => {
     const groups = {};
 
-    nightWorks.forEach((job) => {
+    visibleNightWorks.forEach((job) => {
       const key = `${job.closure_id}`;
 
       if (!groups[key]) {
@@ -248,30 +321,32 @@ function NightWorksPrint() {
       groups[key].jobs.push(job);
     });
 
-    return Object.values(groups).map((group) => ({
-      ...group,
-      jobs: group.jobs.sort((a, b) => {
-        const aMp = Number(a.start_mp ?? 999999);
-        const bMp = Number(b.start_mp ?? 999999);
+    return Object.values(groups)
+      .map((group) => ({
+        ...group,
+        jobs: group.jobs.sort((a, b) => {
+          const aMp = Number(a.start_mp ?? 999999);
+          const bMp = Number(b.start_mp ?? 999999);
 
-        if (aMp !== bMp) return aMp - bMp;
+          if (aMp !== bMp) return aMp - bMp;
 
-        const aEnd = Number(a.end_mp ?? 999999);
-        const bEnd = Number(b.end_mp ?? 999999);
+          const aEnd = Number(a.end_mp ?? 999999);
+          const bEnd = Number(b.end_mp ?? 999999);
 
-        if (aEnd !== bEnd) return aEnd - bEnd;
+          if (aEnd !== bEnd) return aEnd - bEnd;
 
-        return String(a.job_number || "").localeCompare(
-          String(b.job_number || "")
-        );
-      }),
-    }));
-  }, [nightWorks]);
+          return String(a.job_number || "").localeCompare(
+            String(b.job_number || "")
+          );
+        }),
+      }))
+      .filter((group) => group.jobs.length > 0);
+  }, [visibleNightWorks]);
 
   const workstreamTotals = useMemo(() => {
     const totals = {};
 
-    nightWorks.forEach((job) => {
+    visibleNightWorks.forEach((job) => {
       const workstream = job.workstream || "Unknown";
       totals[workstream] = (totals[workstream] || 0) + 1;
     });
@@ -279,10 +354,12 @@ function NightWorksPrint() {
     return Object.entries(totals)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([name, count]) => ({ name, count }));
-  }, [nightWorks]);
+  }, [visibleNightWorks]);
 
-  const totalJobs = nightWorks.length;
+  const totalJobs = visibleNightWorks.length;
   const totalClosures = groupedNightWorks.length;
+  const hiddenJobs = nightWorks.length - visibleNightWorks.length;
+  const riskJobCount = visibleNightWorks.filter(isRiskJob).length;
 
   return (
     <div className="nightworks-print-page">
@@ -353,6 +430,29 @@ function NightWorksPrint() {
               Load Print View
             </button>
           </div>
+        </div>
+
+        <div className="nightworks-toggle-row">
+          <label className="nightworks-toggle">
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={() => setHideCompleted((prev) => !prev)}
+            />
+            <span>Hide Completed / Cancelled Jobs</span>
+          </label>
+
+          {hideCompleted && hiddenJobs > 0 && (
+            <span className="nightworks-hidden-count">
+              {hiddenJobs} hidden
+            </span>
+          )}
+
+          {riskJobCount > 0 && (
+            <span className="nightworks-risk-count">
+              {riskJobCount} risk / priority
+            </span>
+          )}
         </div>
 
         <div className="nightworks-column-picker">
@@ -454,6 +554,14 @@ function NightWorksPrint() {
           <div>
             <strong>Total Jobs:</strong> {totalJobs}
           </div>
+          <div>
+            <strong>Risk / Priority:</strong> {riskJobCount}
+          </div>
+          {hideCompleted && hiddenJobs > 0 && (
+            <div>
+              <strong>Hidden:</strong> {hiddenJobs} completed/cancelled
+            </div>
+          )}
           <div className="nightworks-print-workstreams">
             <strong>Workstreams:</strong>{" "}
             {workstreamTotals.length
@@ -516,7 +624,7 @@ function NightWorksPrint() {
 
                 <tbody>
                   {group.jobs.map((job) => (
-                    <tr key={job.id}>
+                    <tr key={job.id} className={getJobRowClass(job)}>
                       {visibleColumns.date && (
                         <td>{formatDate(job.planned_date)}</td>
                       )}
