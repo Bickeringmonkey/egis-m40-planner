@@ -8,14 +8,20 @@ function Dashboard() {
   const [data, setData] = useState({
     summary: {
       totalJobs: 0,
+      completedJobs: 0,
+      plannedJobs: 0,
+      cancelledJobs: 0,
       overallCompletePercent: 0,
       monthlyCompletePercent: 0,
       paperworkCheckedPercent: 0,
       finalSignoffPercent: 0,
       monthlyTotalJobs: 0,
       monthlyCompleteJobs: 0,
+      finalCompleteJobs: 0,
+      paperworkCheckedJobs: 0,
     },
     completionWorkflow: {
+      total: 0,
       awaitingSupervisor: 0,
       awaitingPaperwork: 0,
       awaitingManager: 0,
@@ -30,7 +36,6 @@ function Dashboard() {
   const [closures, setClosures] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedClosureId, setSelectedClosureId] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,7 +62,10 @@ function Dashboard() {
     }
   };
 
-  const fetchDashboard = async (date = selectedDate, closureId = selectedClosureId) => {
+  const fetchDashboard = async (
+    date = selectedDate,
+    closureId = selectedClosureId
+  ) => {
     try {
       setLoading(true);
       setError("");
@@ -123,13 +131,36 @@ function Dashboard() {
 
   const getStatusClass = (status) => {
     if (!status) return "status-badge";
-    const clean = status.toLowerCase();
+
+    const clean = status.toLowerCase().trim();
 
     if (clean === "planned") return "status-badge status-planned";
-    if (clean === "complete") return "status-badge status-complete";
-    if (clean === "cancelled") return "status-badge status-cancelled";
+    if (clean === "complete" || clean === "completed") {
+      return "status-badge status-complete";
+    }
+    if (clean === "cancelled" || clean === "canceled") {
+      return "status-badge status-cancelled";
+    }
 
     return "status-badge";
+  };
+
+  const getHealthLabel = (value) => {
+    const number = Number(value || 0);
+
+    if (number >= 90) return "Excellent";
+    if (number >= 75) return "On track";
+    if (number >= 50) return "Needs attention";
+    return "At risk";
+  };
+
+  const getProgressClass = (value) => {
+    const number = Number(value || 0);
+
+    if (number >= 90) return "progress-fill progress-good";
+    if (number >= 75) return "progress-fill progress-ok";
+    if (number >= 50) return "progress-fill progress-warning";
+    return "progress-fill progress-risk";
   };
 
   const summary = data.summary || {};
@@ -139,19 +170,30 @@ function Dashboard() {
     (closure) => String(closure.id) === String(selectedClosureId)
   );
 
-  const dashboardScopeLabel = selectedDate || selectedClosureId
-    ? `${selectedDate ? formatDate(selectedDate) : "All dates"}${
-        selectedClosure ? ` · ${selectedClosure.closure_ref}` : ""
-      }`
-    : "All jobs";
+  const dashboardScopeLabel =
+    selectedDate || selectedClosureId
+      ? `${selectedDate ? formatDate(selectedDate) : "All dates"}${
+          selectedClosure ? ` · ${selectedClosure.closure_ref}` : ""
+        }`
+      : "All jobs";
+
+  const jobsRemaining = Math.max(
+    Number(summary.totalJobs || 0) - Number(summary.finalCompleteJobs || 0),
+    0
+  );
+
+  const paperworkRemaining = Math.max(
+    Number(summary.totalJobs || 0) - Number(summary.paperworkCheckedJobs || 0),
+    0
+  );
 
   return (
     <div className="dashboard-modern">
       <div className="dashboard-topbar">
         <div>
-          <h1 className="dashboard-title-modern">Dashboard</h1>
+          <h1 className="dashboard-title-modern">M40 Operational Dashboard</h1>
           <p className="dashboard-subtitle-modern">
-            Completion, paperwork and sign-off overview.
+            Completion, paperwork, sign-off and upcoming works.
           </p>
         </div>
 
@@ -161,7 +203,10 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="filter-card filter-card-compact" style={{ marginBottom: "22px" }}>
+      <div
+        className="filter-card filter-card-compact"
+        style={{ marginBottom: "22px" }}
+      >
         <div className="filter-grid-compact">
           <div className="form-group">
             <label>Dashboard Date</label>
@@ -188,11 +233,7 @@ function Dashboard() {
           </div>
 
           <div className="filter-actions-inline">
-            <button
-              type="button"
-              className="detail-btn"
-              onClick={handleLoad}
-            >
+            <button type="button" className="detail-btn" onClick={handleLoad}>
               Load Dashboard
             </button>
 
@@ -219,35 +260,90 @@ function Dashboard() {
         </p>
       </div>
 
-      {error && <p>{error}</p>}
+      {error && <p className="form-message">{error}</p>}
       {loading && <p>Loading dashboard...</p>}
 
       {!loading && !error && (
         <>
+          <div className="dashboard-hero-grid">
+            <div className="dashboard-hero-card">
+              <div className="dashboard-hero-label">Overall Completion</div>
+              <div className="dashboard-hero-value">
+                {percent(summary.overallCompletePercent)}
+              </div>
+              <div className="dashboard-hero-meta">
+                {summary.finalCompleteJobs || 0} complete from{" "}
+                {summary.totalJobs || 0} total jobs
+              </div>
+
+              <div className="progress-track">
+                <div
+                  className={getProgressClass(summary.overallCompletePercent)}
+                  style={{
+                    width: `${Math.min(
+                      Number(summary.overallCompletePercent || 0),
+                      100
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <div className="dashboard-health-line">
+                Status: {getHealthLabel(summary.overallCompletePercent)}
+              </div>
+            </div>
+
+            <div className="dashboard-hero-card">
+              <div className="dashboard-hero-label">This Month</div>
+              <div className="dashboard-hero-value">
+                {percent(summary.monthlyCompletePercent)}
+              </div>
+              <div className="dashboard-hero-meta">
+                {summary.monthlyCompleteJobs || 0} complete from{" "}
+                {summary.monthlyTotalJobs || 0} this month
+              </div>
+
+              <div className="progress-track">
+                <div
+                  className={getProgressClass(summary.monthlyCompletePercent)}
+                  style={{
+                    width: `${Math.min(
+                      Number(summary.monthlyCompletePercent || 0),
+                      100
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <div className="dashboard-health-line">
+                Monthly position: {getHealthLabel(summary.monthlyCompletePercent)}
+              </div>
+            </div>
+          </div>
+
           <div className="dashboard-kpi-grid">
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-green">%</div>
+              <div className="dashboard-kpi-icon icon-blue">📌</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Overall Complete</div>
+                <div className="dashboard-kpi-label">Total Jobs</div>
                 <div className="dashboard-kpi-value">
-                  {percent(summary.overallCompletePercent)}
+                  {summary.totalJobs || 0}
                 </div>
                 <div className="dashboard-kpi-meta">
-                  {summary.finalCompleteJobs || 0} of {summary.totalJobs || 0} jobs
+                  Current selected view
                 </div>
               </div>
             </div>
 
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-blue">📆</div>
+              <div className="dashboard-kpi-icon icon-green">✅</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">This Month Complete</div>
+                <div className="dashboard-kpi-label">Fully Complete</div>
                 <div className="dashboard-kpi-value">
-                  {percent(summary.monthlyCompletePercent)}
+                  {summary.finalCompleteJobs || 0}
                 </div>
                 <div className="dashboard-kpi-meta">
-                  {summary.monthlyCompleteJobs || 0} of{" "}
-                  {summary.monthlyTotalJobs || 0} this month
+                  Lead scheduler signed off
                 </div>
               </div>
             </div>
@@ -260,21 +356,19 @@ function Dashboard() {
                   {percent(summary.paperworkCheckedPercent)}
                 </div>
                 <div className="dashboard-kpi-meta">
-                  {summary.paperworkCheckedJobs || 0} of{" "}
-                  {summary.totalJobs || 0} jobs
+                  {summary.paperworkCheckedJobs || 0} checked ·{" "}
+                  {paperworkRemaining} remaining
                 </div>
               </div>
             </div>
 
             <div className="dashboard-kpi-card">
-              <div className="dashboard-kpi-icon icon-purple">✅</div>
+              <div className="dashboard-kpi-icon icon-purple">⏳</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Final Sign-Off</div>
-                <div className="dashboard-kpi-value">
-                  {percent(summary.finalSignoffPercent)}
-                </div>
+                <div className="dashboard-kpi-label">Jobs Remaining</div>
+                <div className="dashboard-kpi-value">{jobsRemaining}</div>
                 <div className="dashboard-kpi-meta">
-                  Lead scheduler completion
+                  Not yet fully signed off
                 </div>
               </div>
             </div>
@@ -284,7 +378,7 @@ function Dashboard() {
             <div className="dashboard-panel-header">
               <div>
                 <h2>Completion Workflow</h2>
-                <p>Where jobs currently sit in the sign-off chain</p>
+                <p>Where jobs currently sit in the sign-off chain.</p>
               </div>
             </div>
 
@@ -327,7 +421,7 @@ function Dashboard() {
 
               <div className="dashboard-kpi-card">
                 <div className="dashboard-kpi-body">
-                  <div className="dashboard-kpi-label">Fully Complete</div>
+                  <div className="dashboard-kpi-label">Complete</div>
                   <div className="dashboard-kpi-value">
                     {workflow.complete || 0}
                   </div>
@@ -339,8 +433,11 @@ function Dashboard() {
           <div className="dashboard-panel" style={{ marginBottom: "22px" }}>
             <div className="dashboard-panel-header">
               <div>
-                <h2>% Complete by Workstream</h2>
-                <p>Completion and paperwork progress for the current dashboard view</p>
+                <h2>Completion by Workstream</h2>
+                <p>
+                  Completion and paperwork progress for the current dashboard
+                  view.
+                </p>
               </div>
             </div>
 
@@ -361,11 +458,24 @@ function Dashboard() {
                   {data.workstreamCompletion.length > 0 ? (
                     data.workstreamCompletion.map((row) => (
                       <tr key={row.workstream}>
-                        <td>{row.workstream}</td>
+                        <td>
+                          <strong>{row.workstream}</strong>
+                        </td>
                         <td>{row.totalJobs}</td>
                         <td>{row.completeJobs}</td>
                         <td>
                           <strong>{percent(row.completePercent)}</strong>
+                          <div className="mini-progress-track">
+                            <div
+                              className={getProgressClass(row.completePercent)}
+                              style={{
+                                width: `${Math.min(
+                                  Number(row.completePercent || 0),
+                                  100
+                                )}%`,
+                              }}
+                            />
+                          </div>
                         </td>
                         <td>{percent(row.paperworkPercent)}</td>
                         <td>{row.managerCheckedJobs || 0}</td>
@@ -386,7 +496,7 @@ function Dashboard() {
               <div className="dashboard-panel-header">
                 <div>
                   <h2>This Month by Workstream</h2>
-                  <p>Current month completion split</p>
+                  <p>Current month completion split.</p>
                 </div>
               </div>
 
@@ -405,7 +515,9 @@ function Dashboard() {
                     {data.monthlyWorkstreamCompletion.length > 0 ? (
                       data.monthlyWorkstreamCompletion.map((row) => (
                         <tr key={row.workstream}>
-                          <td>{row.workstream}</td>
+                          <td>
+                            <strong>{row.workstream}</strong>
+                          </td>
                           <td>{row.totalJobs}</td>
                           <td>{row.completeJobs}</td>
                           <td>
@@ -427,8 +539,9 @@ function Dashboard() {
               <div className="dashboard-panel-header">
                 <div>
                   <h2>Upcoming Jobs</h2>
-                  <p>Next 5 jobs for the current dashboard view</p>
+                  <p>Next 5 jobs for the current dashboard view.</p>
                 </div>
+
                 <Link to="/jobs" className="dashboard-panel-link">
                   View all jobs
                 </Link>
