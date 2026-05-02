@@ -2515,3 +2515,57 @@ tbody tr:nth-child(even),
     padding-top: 6px !important;
   }
 }
+/* Night Works page fix */
+.nightworks-page {
+  max-width: 1280px;
+}
+
+.nightworks-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 18px;
+  margin: 18px 0 22px;
+}
+
+.nightworks-summary .stat-card {
+  min-height: 110px;
+}
+
+.nightworks-filters {
+  display: grid;
+  grid-template-columns: 220px 220px 320px auto;
+  gap: 16px;
+  align-items: end;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.nightworks-filters .form-group {
+  margin: 0;
+}
+
+.nightworks-filters input,
+.nightworks-filters select {
+  height: 46px;
+}
+
+.nightworks-filters .detail-btn,
+.nightworks-filters button {
+  height: 46px;
+  white-space: nowrap;
+}
+
+.nightworks-print-action {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 1000px) {
+  .nightworks-summary,
+  .nightworks-filters {
+    grid-template-columns: 1fr;
+  }
+}
