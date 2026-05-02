@@ -130,7 +130,7 @@ function NightWorks() {
         <h1 className="page-title">Night Works</h1>
         <p className="page-subtitle">View all works for a selected date range.</p>
 
-        <div className="dashboard-grid" style={{ marginBottom: "20px" }}>
+        <div className="nightworks-summary" style={{ marginBottom: "20px" }}>
           <div className="stat-card">
             <h3>Selected Range</h3>
             <p style={{ fontSize: "22px" }}>{formatDateRange()}</p>
@@ -147,7 +147,7 @@ function NightWorks() {
           </div>
         </div>
 
-        <Link to="/nightworks-print">
+        <Link to="/nightworks-print-action">
           <button type="button">Open Print View</button>
         </Link>
 
