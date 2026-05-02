@@ -59,7 +59,6 @@ function NightWorksPrint() {
   const [nightWorks, setNightWorks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const [printMode, setPrintMode] = useState("supervisor");
 
   const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -78,6 +77,7 @@ function NightWorksPrint() {
 
   const generatedAt = new Date();
   const effectiveEndDate = endDate || startDate;
+  const showSupervisorChecks = printMode === "supervisor";
 
   const columnOptions = [
     { key: "date", label: "Date" },
@@ -248,7 +248,24 @@ function NightWorksPrint() {
       groups[key].jobs.push(job);
     });
 
-    return Object.values(groups);
+    return Object.values(groups).map((group) => ({
+      ...group,
+      jobs: group.jobs.sort((a, b) => {
+        const aMp = Number(a.start_mp ?? 999999);
+        const bMp = Number(b.start_mp ?? 999999);
+
+        if (aMp !== bMp) return aMp - bMp;
+
+        const aEnd = Number(a.end_mp ?? 999999);
+        const bEnd = Number(b.end_mp ?? 999999);
+
+        if (aEnd !== bEnd) return aEnd - bEnd;
+
+        return String(a.job_number || "").localeCompare(
+          String(b.job_number || "")
+        );
+      }),
+    }));
   }, [nightWorks]);
 
   const workstreamTotals = useMemo(() => {
@@ -490,6 +507,9 @@ function NightWorksPrint() {
                     {visibleColumns.startMp && <th>Start MP</th>}
                     {visibleColumns.endMp && <th>End MP</th>}
                     {visibleColumns.description && <th>Description</th>}
+                    {showSupervisorChecks && <th>Done</th>}
+                    {showSupervisorChecks && <th>Issue</th>}
+                    {showSupervisorChecks && <th>N/S</th>}
                     {visibleColumns.status && <th>Status</th>}
                   </tr>
                 </thead>
@@ -512,6 +532,15 @@ function NightWorksPrint() {
                       {visibleColumns.endMp && <td>{job.end_mp || ""}</td>}
                       {visibleColumns.description && (
                         <td>{job.description || ""}</td>
+                      )}
+                      {showSupervisorChecks && (
+                        <td className="supervisor-check-box"></td>
+                      )}
+                      {showSupervisorChecks && (
+                        <td className="supervisor-check-box"></td>
+                      )}
+                      {showSupervisorChecks && (
+                        <td className="supervisor-check-box"></td>
                       )}
                       {visibleColumns.status && (
                         <td>

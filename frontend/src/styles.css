@@ -3052,3 +3052,17 @@ tbody tr:nth-child(even),
     display: none !important;
   }
 }
+.supervisor-check-box {
+  width: 34px;
+  min-width: 34px;
+  height: 28px;
+  background: #ffffff;
+}
+
+@media print {
+  .supervisor-check-box {
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 22px !important;
+  }
+}
