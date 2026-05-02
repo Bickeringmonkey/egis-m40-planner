@@ -2,15 +2,53 @@ const db = require('../db');
 
 async function getJobs(req, res) {
   try {
-    const [rows] = await db.query(`
+    const { activeOnly, date, closureId, workstreamId } = req.query;
+
+    let sql = `
       SELECT 
         j.*,
         u.name AS created_by_name,
         u.email AS created_by_email
       FROM jobs j
       LEFT JOIN users u ON j.created_by = u.id
-      ORDER BY j.id DESC
-    `);
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    // Hide completed/cancelled jobs when requested
+    if (activeOnly === 'true') {
+      sql += `
+        AND LOWER(COALESCE(j.status, '')) NOT IN (
+          'completed',
+          'complete',
+          'cancelled',
+          'canceled'
+        )
+      `;
+    }
+
+    // Optional date filter
+    if (date) {
+      sql += ` AND DATE(j.job_date) = ?`;
+      params.push(date);
+    }
+
+    // Optional closure filter
+    if (closureId) {
+      sql += ` AND j.closure_id = ?`;
+      params.push(closureId);
+    }
+
+    // Optional workstream filter, only works if your jobs table has workstream_id
+    if (workstreamId) {
+      sql += ` AND j.workstream_id = ?`;
+      params.push(workstreamId);
+    }
+
+    sql += ` ORDER BY j.id DESC`;
+
+    const [rows] = await db.query(sql, params);
 
     res.json(rows);
   } catch (err) {

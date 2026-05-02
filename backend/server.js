@@ -1065,8 +1065,11 @@ app.post("/api/jobs/import/preview", auth, requireRole("admin", "planner"), (req
 
 app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req, res) => {
   const { jobs = [], mode = "upsert" } = req.body;
+  const createdBy = req.user.id;
 
-  if (!Array.isArray(jobs) || jobs.length === 0) return res.status(400).json({ error: "No jobs provided" });
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return res.status(400).json({ error: "No jobs provided" });
+  }
 
   db.query(`SELECT id, closure_ref FROM closures`, (closureErr, closures) => {
     if (closureErr) {
@@ -1133,12 +1136,12 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
             const insertSql = `
               INSERT INTO jobs (
                 job_number, title, work_order, activity, location, description, activity_code,
-                closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes
+                closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes, created_by
               )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
 
-            db.query(insertSql, values, (insertErr) => {
+            db.query(insertSql, [...values, createdBy], (insertErr) => {
               if (insertErr) {
                 console.error("Import insert error:", insertErr);
                 return res.status(500).json({ error: `Insert failed on row ${row.rowNumber}` });
