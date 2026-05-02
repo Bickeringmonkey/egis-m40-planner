@@ -60,6 +60,8 @@ function NightWorksPrint() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [printMode, setPrintMode] = useState("supervisor");
+
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem("nightworksPrintColumns");
 
@@ -156,14 +158,17 @@ function NightWorksPrint() {
   };
 
   const applyPreset = (presetName) => {
+    setPrintMode(presetName);
     setVisibleColumns(columnPresets[presetName]);
   };
 
   const resetColumns = () => {
+    setPrintMode("supervisor");
     setVisibleColumns(defaultColumns);
   };
 
-  const selectedColumnCount = Object.values(visibleColumns).filter(Boolean).length;
+  const selectedColumnCount =
+    Object.values(visibleColumns).filter(Boolean).length;
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -335,36 +340,46 @@ function NightWorksPrint() {
 
         <div className="nightworks-column-picker">
           <div>
-            <strong>Print Columns</strong>
+            <strong>Print Mode</strong>
             <p>
-              Select what appears on the printed programme. Your choice is saved
+              Choose the type of output you need. Column choices are saved
               automatically.
             </p>
+          </div>
+
+          <div className="nightworks-mode-toggle">
+            <button
+              type="button"
+              className={
+                printMode === "supervisor"
+                  ? "nightworks-mode-btn active"
+                  : "nightworks-mode-btn"
+              }
+              onClick={() => applyPreset("supervisor")}
+            >
+              Night Delivery Sheet
+            </button>
+
+            <button
+              type="button"
+              className={
+                printMode === "full"
+                  ? "nightworks-mode-btn active"
+                  : "nightworks-mode-btn"
+              }
+              onClick={() => applyPreset("full")}
+            >
+              Full Planning View
+            </button>
           </div>
 
           <div className="nightworks-column-presets">
             <button
               type="button"
               className="detail-btn detail-btn-secondary"
-              onClick={() => applyPreset("supervisor")}
-            >
-              Supervisor View
-            </button>
-
-            <button
-              type="button"
-              className="detail-btn detail-btn-secondary"
               onClick={() => applyPreset("commercial")}
             >
               Commercial View
-            </button>
-
-            <button
-              type="button"
-              className="detail-btn detail-btn-secondary"
-              onClick={() => applyPreset("full")}
-            >
-              Full Detail
             </button>
 
             <button
@@ -482,14 +497,22 @@ function NightWorksPrint() {
                 <tbody>
                   {group.jobs.map((job) => (
                     <tr key={job.id}>
-                      {visibleColumns.date && <td>{formatDate(job.planned_date)}</td>}
+                      {visibleColumns.date && (
+                        <td>{formatDate(job.planned_date)}</td>
+                      )}
                       {visibleColumns.jobNo && <td>{job.job_number}</td>}
-                      {visibleColumns.workOrder && <td>{job.work_order || ""}</td>}
-                      {visibleColumns.activity && <td>{job.activity || job.title || ""}</td>}
+                      {visibleColumns.workOrder && (
+                        <td>{job.work_order || ""}</td>
+                      )}
+                      {visibleColumns.activity && (
+                        <td>{job.activity || job.title || ""}</td>
+                      )}
                       {visibleColumns.location && <td>{job.location || ""}</td>}
                       {visibleColumns.startMp && <td>{job.start_mp || ""}</td>}
                       {visibleColumns.endMp && <td>{job.end_mp || ""}</td>}
-                      {visibleColumns.description && <td>{job.description || ""}</td>}
+                      {visibleColumns.description && (
+                        <td>{job.description || ""}</td>
+                      )}
                       {visibleColumns.status && (
                         <td>
                           <span className={getStatusClass(job.status)}>

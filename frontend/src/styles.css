@@ -3014,3 +3014,41 @@ tbody tr:nth-child(even),
     display: none !important;
   }
 }
+.nightworks-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.nightworks-mode-btn {
+  min-height: 56px;
+  border-radius: 14px;
+  background: #f6f9fb;
+  color: #09212c;
+  border: 2px solid #dbe4ea;
+  font-weight: 800;
+}
+
+.nightworks-mode-btn.active {
+  background: #00617e;
+  color: white;
+  border-color: #00617e;
+}
+
+.nightworks-mode-btn:hover {
+  filter: none;
+  border-color: #00617e;
+}
+
+@media (max-width: 760px) {
+  .nightworks-mode-toggle {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .nightworks-mode-toggle {
+    display: none !important;
+  }
+}
