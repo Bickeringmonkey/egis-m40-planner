@@ -3,6 +3,54 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import logo from "../assets/egis-logo.png";
 
+const defaultColumns = {
+  date: false,
+  jobNo: true,
+  workOrder: true,
+  activity: false,
+  location: true,
+  startMp: true,
+  endMp: true,
+  description: true,
+  status: false,
+};
+
+const columnPresets = {
+  supervisor: {
+    date: false,
+    jobNo: true,
+    workOrder: false,
+    activity: false,
+    location: true,
+    startMp: true,
+    endMp: true,
+    description: true,
+    status: false,
+  },
+  commercial: {
+    date: true,
+    jobNo: true,
+    workOrder: true,
+    activity: true,
+    location: false,
+    startMp: false,
+    endMp: false,
+    description: false,
+    status: true,
+  },
+  full: {
+    date: true,
+    jobNo: true,
+    workOrder: true,
+    activity: true,
+    location: true,
+    startMp: true,
+    endMp: true,
+    description: true,
+    status: true,
+  },
+};
+
 function NightWorksPrint() {
   const [startDate, setStartDate] = useState("2026-04-27");
   const [endDate, setEndDate] = useState("2026-04-27");
@@ -12,16 +60,18 @@ function NightWorksPrint() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [visibleColumns, setVisibleColumns] = useState({
-    date: false,
-    jobNo: true,
-    workOrder: true,
-    activity: false,
-    location: true,
-    startMp: true,
-    endMp: true,
-    description: true,
-    status: false,
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem("nightworksPrintColumns");
+
+    if (saved) {
+      try {
+        return { ...defaultColumns, ...JSON.parse(saved) };
+      } catch {
+        return defaultColumns;
+      }
+    }
+
+    return defaultColumns;
   });
 
   const generatedAt = new Date();
@@ -44,6 +94,13 @@ function NightWorksPrint() {
     fetchNightWorks("2026-04-27", "2026-04-27", "");
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem(
+      "nightworksPrintColumns",
+      JSON.stringify(visibleColumns)
+    );
+  }, [visibleColumns]);
+
   const fetchClosures = async () => {
     try {
       const response = await api.get("/closures");
@@ -53,7 +110,11 @@ function NightWorksPrint() {
     }
   };
 
-  const fetchNightWorks = async (selectedStartDate, selectedEndDate, selectedClosureId) => {
+  const fetchNightWorks = async (
+    selectedStartDate,
+    selectedEndDate,
+    selectedClosureId
+  ) => {
     try {
       setLoading(true);
       setError("");
@@ -93,6 +154,16 @@ function NightWorksPrint() {
       [key]: !prev[key],
     }));
   };
+
+  const applyPreset = (presetName) => {
+    setVisibleColumns(columnPresets[presetName]);
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(defaultColumns);
+  };
+
+  const selectedColumnCount = Object.values(visibleColumns).filter(Boolean).length;
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -137,8 +208,12 @@ function NightWorksPrint() {
     const clean = status.toLowerCase().trim();
 
     if (clean === "planned") return "status-badge status-planned";
-    if (clean === "complete" || clean === "completed") return "status-badge status-complete";
-    if (clean === "cancelled" || clean === "canceled") return "status-badge status-cancelled";
+    if (clean === "complete" || clean === "completed") {
+      return "status-badge status-complete";
+    }
+    if (clean === "cancelled" || clean === "canceled") {
+      return "status-badge status-cancelled";
+    }
 
     return "status-badge";
   };
@@ -261,8 +336,51 @@ function NightWorksPrint() {
         <div className="nightworks-column-picker">
           <div>
             <strong>Print Columns</strong>
-            <p>Select what appears on the printed programme.</p>
+            <p>
+              Select what appears on the printed programme. Your choice is saved
+              automatically.
+            </p>
           </div>
+
+          <div className="nightworks-column-presets">
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={() => applyPreset("supervisor")}
+            >
+              Supervisor View
+            </button>
+
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={() => applyPreset("commercial")}
+            >
+              Commercial View
+            </button>
+
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={() => applyPreset("full")}
+            >
+              Full Detail
+            </button>
+
+            <button
+              type="button"
+              className="detail-btn detail-btn-secondary"
+              onClick={resetColumns}
+            >
+              Reset
+            </button>
+          </div>
+
+          {selectedColumnCount > 7 && (
+            <div className="nightworks-column-warning">
+              You have selected a lot of columns. Print may be tight on A4.
+            </div>
+          )}
 
           <div className="nightworks-column-options">
             {columnOptions.map((column) => (
@@ -292,14 +410,24 @@ function NightWorksPrint() {
         </div>
 
         <div className="nightworks-print-meta">
-          <div><strong>Date Range:</strong> {formatDateRange()}</div>
-          <div><strong>Generated:</strong> {formatDateTime(generatedAt)}</div>
-          <div><strong>Closures:</strong> {totalClosures}</div>
-          <div><strong>Total Jobs:</strong> {totalJobs}</div>
+          <div>
+            <strong>Date Range:</strong> {formatDateRange()}
+          </div>
+          <div>
+            <strong>Generated:</strong> {formatDateTime(generatedAt)}
+          </div>
+          <div>
+            <strong>Closures:</strong> {totalClosures}
+          </div>
+          <div>
+            <strong>Total Jobs:</strong> {totalJobs}
+          </div>
           <div className="nightworks-print-workstreams">
             <strong>Workstreams:</strong>{" "}
             {workstreamTotals.length
-              ? workstreamTotals.map((item) => `${item.name} (${item.count})`).join(", ")
+              ? workstreamTotals
+                  .map((item) => `${item.name} (${item.count})`)
+                  .join(", ")
               : "None"}
           </div>
         </div>
@@ -329,7 +457,8 @@ function NightWorksPrint() {
                 <div>
                   <p>
                     <strong>NEMS:</strong> {group.nems_number || "None"} |{" "}
-                    <strong>Junctions:</strong> {group.junctions_between || "None"} |{" "}
+                    <strong>Junctions:</strong>{" "}
+                    {group.junctions_between || "None"} |{" "}
                     <strong>Lane:</strong> {group.lane_configuration || "None"}
                   </p>
                 </div>

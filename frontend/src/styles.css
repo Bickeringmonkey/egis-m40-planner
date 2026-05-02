@@ -2990,3 +2990,27 @@ tbody tr:nth-child(even),
   width: auto;
   margin: 0;
 }
+.nightworks-column-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.nightworks-column-warning {
+  background: #fff7e6;
+  border: 1px solid #f2b84b;
+  color: #7a5200;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+@media print {
+  .nightworks-column-picker,
+  .nightworks-column-presets,
+  .nightworks-column-warning {
+    display: none !important;
+  }
+}
