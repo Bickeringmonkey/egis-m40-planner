@@ -147,9 +147,11 @@ function NightWorks() {
           </div>
         </div>
 
-        <Link to="/nightworks-print-action">
-          <button type="button">Open Print View</button>
-        </Link>
+        <div className="nightworks-print-action">
+          <Link to="/nightworks-print" className="detail-btn nightworks-print-link">
+            Open Print View
+          </Link>
+        </div>
 
         <div className="card">
           <div className="nightworks-filters">

@@ -2599,3 +2599,21 @@ tbody tr:nth-child(even),
     grid-template-columns: 1fr;
   }
 }
+.nightworks-print-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 11px 18px;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: white;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.nightworks-print-link:hover {
+  background: #004d63;
+  color: white;
+  text-decoration: none;
+}
