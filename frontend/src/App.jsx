@@ -81,12 +81,12 @@ function AppShell() {
           icon: ClipboardList,
           roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
         },
-        {
-          to: "/import-jobs",
-          label: "Import Jobs",
-          icon: Upload, // import from lucide-react
-          roles: ["admin", "planner"],
-        },
+        //{
+        //  to: "/import-jobs",
+        //  label: "Import Jobs",
+        //  icon: Upload, // import from lucide-react
+        //  roles: ["admin", "planner"],
+        //},
       ],
     },
     {
