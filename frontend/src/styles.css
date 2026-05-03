@@ -3646,3 +3646,223 @@ tbody tr:nth-child(even),
     background: white !important;
   }
 }
+/* ================================
+   ISSUES PRINT REPORT - CLEAN A4
+================================ */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-hide,
+  .sidebar-modern,
+  .sidebar,
+  .sidebar-footer,
+  nav,
+  button,
+  .issues-kpi-grid,
+  .issues-insight-card,
+  .filter-card {
+    display: none !important;
+  }
+
+  .app-shell,
+  .main-content-modern {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .issues-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .issues-print-header {
+    display: block !important;
+    margin-bottom: 8px !important;
+    padding-bottom: 6px !important;
+    border-bottom: 2px solid #d92d20 !important;
+  }
+
+  .issues-print-header h1 {
+    margin: 0 !important;
+    font-size: 18px !important;
+    color: #09212c !important;
+  }
+
+  .issues-print-header p {
+    margin: 2px 0 0 !important;
+    font-size: 10px !important;
+    color: #333 !important;
+  }
+
+  .issues-group {
+    margin-bottom: 10px !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .issues-group-header {
+    display: block !important;
+    background: #f1f5f8 !important;
+    color: black !important;
+    border: 1px solid #cfd8df !important;
+    border-bottom: none !important;
+    border-radius: 0 !important;
+    padding: 5px 7px !important;
+    margin: 0 !important;
+  }
+
+  .issues-group-header h2 {
+    margin: 0 0 2px 0 !important;
+    font-size: 12px !important;
+    color: black !important;
+  }
+
+  .issues-group-header p {
+    margin: 1px 0 !important;
+    font-size: 8px !important;
+    color: black !important;
+  }
+
+  .issue-count-pill,
+  .closure-group-count {
+    display: none !important;
+  }
+
+  .table-wrapper {
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .issues-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  .issues-table th,
+  .issues-table td {
+    border: 1px solid #cfd8df !important;
+    padding: 3px 4px !important;
+    font-size: 7.5px !important;
+    line-height: 1.15 !important;
+    color: black !important;
+    background: white !important;
+    vertical-align: top !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .issues-table th {
+    background: #eef3f6 !important;
+    font-weight: 800 !important;
+  }
+
+  .issues-table thead {
+    display: table-header-group !important;
+  }
+
+  .issues-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .issues-table th:nth-child(1),
+  .issues-table td:nth-child(1) {
+    width: 8%;
+  }
+
+  .issues-table th:nth-child(2),
+  .issues-table td:nth-child(2) {
+    width: 8%;
+  }
+
+  .issues-table th:nth-child(3),
+  .issues-table td:nth-child(3) {
+    width: 12%;
+  }
+
+  .issues-table th:nth-child(4),
+  .issues-table td:nth-child(4) {
+    width: 11%;
+  }
+
+  .issues-table th:nth-child(5),
+  .issues-table td:nth-child(5) {
+    width: 10%;
+  }
+
+  .issues-table th:nth-child(6),
+  .issues-table td:nth-child(6) {
+    width: 22%;
+  }
+
+  .issues-table th:nth-child(7),
+  .issues-table td:nth-child(7) {
+    width: 8%;
+  }
+
+  .issues-table th:nth-child(8),
+  .issues-table td:nth-child(8) {
+    width: 16%;
+  }
+
+  .issues-table th:nth-child(9),
+  .issues-table td:nth-child(9) {
+    width: 13%;
+  }
+
+  .issue-age,
+  .issue-reason {
+    display: inline !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: black !important;
+    font-size: 7.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .issue-escalated-label {
+    display: block !important;
+    margin-top: 2px !important;
+    font-size: 7px !important;
+    color: #d92d20 !important;
+    font-weight: 900 !important;
+  }
+
+  .issue-table-row-escalated td:first-child {
+    border-left: 3px solid #d92d20 !important;
+  }
+
+  .issues-work-order {
+    margin-top: 2px !important;
+    font-size: 7px !important;
+    color: #555 !important;
+  }
+
+  .issues-notes {
+    font-size: 7.5px !important;
+  }
+
+  a {
+    color: black !important;
+    text-decoration: none !important;
+  }
+}
