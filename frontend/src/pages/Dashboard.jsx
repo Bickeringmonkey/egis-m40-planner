@@ -380,7 +380,7 @@ function Dashboard() {
                   {summary.issueJobs || 0}
                 </div>
                 <div className="dashboard-kpi-meta">
-                  Jobs marked with an issue
+                  Live operational exceptions
                 </div>
               </div>
             </div>
