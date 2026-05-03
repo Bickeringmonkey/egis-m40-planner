@@ -3272,3 +3272,41 @@ tbody tr:nth-child(even),
   background: #ffe3e0;
   color: #d92d20;
 }
+.dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.dashboard-kpi-card {
+  min-height: 150px;
+}
+
+.dashboard-kpi-card-danger {
+  border-left: 5px solid #d92d20;
+  background: #fff7f7;
+}
+
+.icon-red {
+  background: #ffe3e0;
+  color: #d92d20;
+}
+
+@media (max-width: 1400px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
