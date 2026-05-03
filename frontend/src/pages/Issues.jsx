@@ -61,7 +61,6 @@ function Issues() {
 
     try {
       setMessage("");
-
       await api.put(`/jobs/${jobId}/resolve-issue`);
 
       setIssues((prev) => prev.filter((issue) => issue.id !== jobId));
@@ -72,9 +71,7 @@ function Issues() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   const handleLoad = () => {
     loadIssues(date, closureId);
@@ -96,19 +93,23 @@ function Issues() {
     return new Date(value).toLocaleDateString("en-GB");
   };
 
-  const getIssueAgeDays = (plannedDate) => {
-    if (!plannedDate) return 0;
+  const getIssueAgeDays = (job) => {
+    if (job.issue_age_days !== undefined && job.issue_age_days !== null) {
+      return Number(job.issue_age_days || 0);
+    }
 
-    const planned = new Date(plannedDate);
+    if (!job.planned_date) return 0;
+
+    const planned = new Date(job.planned_date);
     const now = new Date();
 
     planned.setHours(0, 0, 0, 0);
     now.setHours(0, 0, 0, 0);
 
-    const diffMs = now - planned;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    return Math.max(diffDays, 0);
+    return Math.max(
+      Math.floor((now - planned) / (1000 * 60 * 60 * 24)),
+      0
+    );
   };
 
   const getAgeClass = (days) => {
@@ -123,12 +124,22 @@ function Issues() {
     return `${days} days open`;
   };
 
+  const getReasonClass = (reason) => {
+    const clean = String(reason || "").toLowerCase();
+
+    if (clean.includes("paperwork")) return "issue-reason issue-reason-paperwork";
+    if (clean.includes("works")) return "issue-reason issue-reason-works";
+    if (clean.includes("supervisor")) return "issue-reason issue-reason-supervisor";
+
+    return "issue-reason";
+  };
+
   const groupedIssues = useMemo(() => {
     const groups = {};
 
     const sortedIssues = [...issues].sort((a, b) => {
-      const ageA = getIssueAgeDays(a.planned_date);
-      const ageB = getIssueAgeDays(b.planned_date);
+      const ageA = getIssueAgeDays(a);
+      const ageB = getIssueAgeDays(b);
 
       if (ageA !== ageB) return ageB - ageA;
 
@@ -163,12 +174,43 @@ function Issues() {
     return Object.values(groups);
   }, [issues]);
 
+  const issueStats = useMemo(() => {
+    const byWorkstream = {};
+    const byClosure = {};
+    let escalated = 0;
+
+    issues.forEach((issue) => {
+      const workstream = issue.workstream || "Unknown";
+      const closure = issue.closure_ref || "No closure";
+      const ageDays = getIssueAgeDays(issue);
+
+      byWorkstream[workstream] = (byWorkstream[workstream] || 0) + 1;
+      byClosure[closure] = (byClosure[closure] || 0) + 1;
+
+      if (issue.issue_escalated || ageDays >= 4) {
+        escalated += 1;
+      }
+    });
+
+    const topWorkstream =
+      Object.entries(byWorkstream).sort((a, b) => b[1] - a[1])[0] || null;
+
+    const topClosure =
+      Object.entries(byClosure).sort((a, b) => b[1] - a[1])[0] || null;
+
+    return {
+      escalated,
+      topWorkstream,
+      topClosure,
+    };
+  }, [issues]);
+
   const selectedClosure = closures.find(
     (closure) => String(closure.id) === String(closureId)
   );
 
   const oldestIssueDays = issues.length
-    ? Math.max(...issues.map((issue) => getIssueAgeDays(issue.planned_date)))
+    ? Math.max(...issues.map((issue) => getIssueAgeDays(issue)))
     : 0;
 
   const scopeLabel =
@@ -184,7 +226,7 @@ function Issues() {
         <div>
           <h1 className="page-title">Issues</h1>
           <p className="page-subtitle">
-            Open supervisor issues flagged from the closure checklist.
+            Open operational issues, ageing, reason codes and escalation.
           </p>
         </div>
 
@@ -233,7 +275,47 @@ function Issues() {
             </div>
           </div>
         </div>
+
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon icon-red">🔥</div>
+          <div className="dashboard-kpi-body">
+            <div className="dashboard-kpi-label">Escalated</div>
+            <div className="dashboard-kpi-value">{issueStats.escalated}</div>
+            <div className="dashboard-kpi-meta">Open 4+ days</div>
+          </div>
+        </div>
       </div>
+
+      {issues.length > 0 && (
+        <div className="issues-insight-card print-hide">
+          <div>
+            <span>Top workstream</span>
+            <strong>
+              {issueStats.topWorkstream
+                ? `${issueStats.topWorkstream[0]} (${issueStats.topWorkstream[1]})`
+                : "N/A"}
+            </strong>
+          </div>
+
+          <div>
+            <span>Top closure</span>
+            <strong>
+              {issueStats.topClosure
+                ? `${issueStats.topClosure[0]} (${issueStats.topClosure[1]})`
+                : "N/A"}
+            </strong>
+          </div>
+
+          <div>
+            <span>Action focus</span>
+            <strong>
+              {issueStats.escalated > 0
+                ? "Escalated issues need chasing"
+                : "No escalated issues"}
+            </strong>
+          </div>
+        </div>
+      )}
 
       <div className="filter-card filter-card-compact print-hide">
         <div className="filter-grid-compact">
@@ -301,7 +383,10 @@ function Issues() {
 
       {!loading &&
         groupedIssues.map((group) => (
-          <div key={group.closure_id || group.closure_ref} className="issues-group">
+          <div
+            key={group.closure_id || group.closure_ref}
+            className="issues-group"
+          >
             <div className="closure-group-header issues-group-header">
               <div>
                 <h2>
@@ -334,6 +419,7 @@ function Issues() {
                   <tr>
                     <th>Date</th>
                     <th>Age</th>
+                    <th>Reason</th>
                     <th>Job No</th>
                     <th>Workstream</th>
                     <th>Location</th>
@@ -346,16 +432,39 @@ function Issues() {
 
                 <tbody>
                   {group.jobs.map((job) => {
-                    const ageDays = getIssueAgeDays(job.planned_date);
+                    const ageDays = getIssueAgeDays(job);
+                    const reason =
+                      job.issue_reason_label ||
+                      job.issue_reason ||
+                      "Issue flagged";
 
                     return (
-                      <tr key={job.id} className="issue-table-row">
+                      <tr
+                        key={job.id}
+                        className={
+                          ageDays >= 4
+                            ? "issue-table-row issue-table-row-escalated"
+                            : "issue-table-row"
+                        }
+                      >
                         <td>{formatDate(job.planned_date)}</td>
 
                         <td>
                           <span className={getAgeClass(ageDays)}>
                             {getAgeLabel(ageDays)}
                           </span>
+                        </td>
+
+                        <td>
+                          <span className={getReasonClass(reason)}>
+                            {reason}
+                          </span>
+
+                          {ageDays >= 4 && (
+                            <div className="issue-escalated-label">
+                              Escalated
+                            </div>
+                          )}
                         </td>
 
                         <td>

@@ -3533,3 +3533,116 @@ tbody tr:nth-child(even),
     border-left: 4px solid #d92d20 !important;
   }
 }
+.issues-insight-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 14px rgba(9, 33, 44, 0.05);
+}
+
+.issues-insight-card div {
+  background: #f8fafc;
+  border: 1px solid #e5edf2;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.issues-insight-card span {
+  display: block;
+  font-size: 12px;
+  color: var(--color-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.issues-insight-card strong {
+  display: block;
+  color: var(--color-dark);
+  font-size: 15px;
+}
+
+.issue-reason {
+  display: inline-flex;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: #eef2f7;
+  color: #344054;
+  border: 1px solid #d0d5dd;
+}
+
+.issue-reason-paperwork {
+  background: #fff7e6;
+  color: #92400e;
+  border-color: #facc15;
+}
+
+.issue-reason-works {
+  background: #fff1f0;
+  color: #a8071a;
+  border-color: #ffb4ad;
+}
+
+.issue-reason-supervisor {
+  background: #e6f1f5;
+  color: #00617e;
+  border-color: #b8d9e5;
+}
+
+.issue-escalated-label {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #d92d20;
+  text-transform: uppercase;
+}
+
+.issue-table-row-escalated td:first-child {
+  border-left: 6px solid #d92d20 !important;
+}
+
+.issue-table-row-escalated td {
+  background: #fff5f5 !important;
+}
+
+@media (max-width: 900px) {
+  .issues-insight-card {
+    grid-template-columns: 1fr;
+  }
+
+  .issues-table {
+    min-width: 1150px;
+  }
+}
+
+@media print {
+  .issues-insight-card {
+    display: none !important;
+  }
+
+  .issue-reason,
+  .issue-age {
+    background: white !important;
+    color: black !important;
+    border: 1px solid #999 !important;
+    font-size: 7.5pt !important;
+    padding: 2px 4px !important;
+  }
+
+  .issue-escalated-label {
+    color: black !important;
+    font-size: 7pt !important;
+  }
+
+  .issue-table-row-escalated td {
+    background: white !important;
+  }
+}

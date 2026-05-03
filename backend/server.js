@@ -94,6 +94,16 @@ function normaliseClosureDates(closure_date, start_date, end_date) {
     end_date: finalEndDate,
   };
 }
+function getIssueReason(job) {
+  const notes = String(job.completion_notes || "").trim();
+
+  if (job.issue_reason) return job.issue_reason;
+  if (job.issue_flagged && notes) return "Supervisor flagged issue";
+  if (!job.supervisor_checked) return "Works not completed";
+  if (job.supervisor_checked && !job.paperwork_checked) return "Paperwork missing";
+
+  return "Issue flagged";
+}
 
 // -----------------------------
 // Excel Upload Validation
@@ -947,7 +957,22 @@ app.get(
   (req, res) => {
     const { date, closureId } = req.query;
 
-    const filters = ["jobs.issue_flagged = 1"];
+    const filters = [
+      `(
+        jobs.issue_flagged = 1
+        OR (
+          jobs.planned_date < CURDATE()
+          AND jobs.lead_scheduler_checked = 0
+          AND LOWER(COALESCE(jobs.status, '')) NOT IN ('complete', 'completed', 'cancelled', 'canceled')
+        )
+        OR (
+          jobs.supervisor_checked = 1
+          AND jobs.paperwork_checked = 0
+          AND LOWER(COALESCE(jobs.status, '')) NOT IN ('complete', 'completed', 'cancelled', 'canceled')
+        )
+      )`,
+    ];
+
     const params = [];
 
     if (date) {
@@ -975,6 +1000,12 @@ app.get(
         jobs.planned_date,
         jobs.completion_notes,
         jobs.issue_flagged,
+        jobs.issue_reason,
+        jobs.issue_resolved_at,
+        jobs.issue_resolved_by,
+        jobs.supervisor_checked,
+        jobs.paperwork_checked,
+        jobs.lead_scheduler_checked,
         jobs.closure_id,
         workstreams.name AS workstream,
         closures.closure_ref,
@@ -995,7 +1026,27 @@ app.get(
         return res.status(500).json({ error: "Failed to fetch issues" });
       }
 
-      res.json(results);
+      const mapped = results.map((job) => {
+        const issueReason = getIssueReason(job);
+        const planned = job.planned_date ? new Date(job.planned_date) : null;
+        const now = new Date();
+
+        if (planned) planned.setHours(0, 0, 0, 0);
+        now.setHours(0, 0, 0, 0);
+
+        const ageDays = planned
+          ? Math.max(Math.floor((now - planned) / (1000 * 60 * 60 * 24)), 0)
+          : 0;
+
+        return {
+          ...job,
+          issue_reason_label: issueReason,
+          issue_age_days: ageDays,
+          issue_escalated: ageDays >= 4 ? 1 : 0,
+        };
+      });
+
+      res.json(mapped);
     });
   }
 );
@@ -1009,11 +1060,14 @@ app.put(
 
     const sql = `
       UPDATE jobs
-      SET issue_flagged = 0
+      SET issue_flagged = 0,
+          issue_reason = NULL,
+          issue_resolved_at = NOW(),
+          issue_resolved_by = ?
       WHERE id = ?
     `;
 
-    db.query(sql, [jobId], (err, result) => {
+    db.query(sql, [req.user.id, jobId], (err, result) => {
       if (err) {
         console.error("Resolve issue error:", err);
         return res.status(500).json({ error: "Failed to resolve issue" });
@@ -1485,6 +1539,7 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
     supervisor_checked,
     paperwork_checked,
     issue_flagged,
+    issue_reason,
     completion_notes,
   } = req.body;
 
@@ -1503,6 +1558,7 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
         paperwork_checked_by = ?,
         paperwork_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
         issue_flagged = ?,
+        issue_reason = ?,
         completion_notes = ?
     WHERE id = ?
   `;
@@ -1517,6 +1573,7 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
       paperwork_checked ? req.user.id : null,
       paperwork_checked ? 1 : 0,
       issue_flagged ? 1 : 0,
+      issue_flagged ? issue_reason || "Supervisor flagged issue" : null,
       completion_notes || null,
       jobId,
     ],
