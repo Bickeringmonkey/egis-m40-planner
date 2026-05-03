@@ -375,13 +375,13 @@ function Dashboard() {
             <div className="dashboard-kpi-card dashboard-kpi-card-danger">
               <div className="dashboard-kpi-icon icon-red">⚠️</div>
               <div className="dashboard-kpi-body">
-                <div className="dashboard-kpi-label">Issues Flagged</div>
-                <div className="dashboard-kpi-value">
-                  {summary.issueJobs || 0}
-                </div>
-                <div className="dashboard-kpi-meta">
-                  Live operational exceptions
-                </div>
+               <div className="dashboard-kpi-label">Issues Flagged</div>
+
+              <div className="dashboard-kpi-meta">
+                {summary.issueJobs > 0
+                  ? "Needs attention"
+                  : "No issues reported"}
+              </div>
 
                 <Link to="/issues" className="dashboard-panel-link">
                   View Issues
