@@ -3396,3 +3396,140 @@ tbody tr:nth-child(even),
     min-width: 950px;
   }
 }
+.issues-print-header {
+  display: none;
+}
+
+.issue-age {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.issue-age-green {
+  background: #e6f7ec;
+  color: #166534;
+  border-color: #b7ebc6;
+}
+
+.issue-age-amber {
+  background: #fff7e6;
+  color: #92400e;
+  border-color: #facc15;
+}
+
+.issue-age-red {
+  background: #fff1f0;
+  color: #a8071a;
+  border-color: #ffb4ad;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  .issues-print-header {
+    display: block !important;
+    margin-bottom: 12px;
+    border-bottom: 3px solid #d92d20;
+    padding-bottom: 8px;
+  }
+
+  .issues-print-header h1 {
+    margin: 0;
+    font-size: 22px;
+    color: #09212c;
+  }
+
+  .issues-print-header p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #333;
+  }
+
+  .issues-page {
+    max-width: 100% !important;
+  }
+
+  .issues-kpi-grid {
+    display: none !important;
+  }
+
+  .issues-table {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+
+  .issues-table th,
+  .issues-table td {
+    font-size: 8pt !important;
+    padding: 4px !important;
+    color: black !important;
+    border: 1px solid #d7dee5 !important;
+  }
+
+  .issues-table th:nth-child(1),
+  .issues-table td:nth-child(1) {
+    width: 8%;
+  }
+
+  .issues-table th:nth-child(2),
+  .issues-table td:nth-child(2) {
+    width: 9%;
+  }
+
+  .issues-table th:nth-child(3),
+  .issues-table td:nth-child(3) {
+    width: 10%;
+  }
+
+  .issues-table th:nth-child(4),
+  .issues-table td:nth-child(4) {
+    width: 12%;
+  }
+
+  .issues-table th:nth-child(5),
+  .issues-table td:nth-child(5) {
+    width: 22%;
+  }
+
+  .issues-table th:nth-child(6),
+  .issues-table td:nth-child(6) {
+    width: 7%;
+  }
+
+  .issues-table th:nth-child(7),
+  .issues-table td:nth-child(7) {
+    width: 18%;
+  }
+
+  .issues-table th:nth-child(8),
+  .issues-table td:nth-child(8) {
+    width: 22%;
+  }
+
+  .issue-age {
+    font-size: 7.5pt !important;
+    padding: 2px 4px !important;
+    min-width: auto !important;
+    background: white !important;
+    color: black !important;
+    border: 1px solid #999 !important;
+  }
+
+  .issue-table-row td {
+    background: white !important;
+  }
+
+  .issue-table-row td:first-child {
+    border-left: 4px solid #d92d20 !important;
+  }
+}

@@ -11,7 +11,6 @@ function Issues() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [showTodayOnly, setShowTodayOnly] = useState(false);
 
   useEffect(() => {
     loadClosures();
@@ -73,20 +72,22 @@ function Issues() {
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   const handleLoad = () => {
     loadIssues(date, closureId);
   };
 
   const loadToday = () => {
     setDate(today);
-    setShowTodayOnly(true);
     loadIssues(today, closureId);
   };
 
   const clearFilters = () => {
     setDate("");
     setClosureId("");
-    setShowTodayOnly(false);
     loadIssues("", "");
   };
 
@@ -95,10 +96,53 @@ function Issues() {
     return new Date(value).toLocaleDateString("en-GB");
   };
 
+  const getIssueAgeDays = (plannedDate) => {
+    if (!plannedDate) return 0;
+
+    const planned = new Date(plannedDate);
+    const now = new Date();
+
+    planned.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+
+    const diffMs = now - planned;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    return Math.max(diffDays, 0);
+  };
+
+  const getAgeClass = (days) => {
+    if (days >= 4) return "issue-age issue-age-red";
+    if (days >= 2) return "issue-age issue-age-amber";
+    return "issue-age issue-age-green";
+  };
+
+  const getAgeLabel = (days) => {
+    if (days === 0) return "Today";
+    if (days === 1) return "1 day open";
+    return `${days} days open`;
+  };
+
   const groupedIssues = useMemo(() => {
     const groups = {};
 
-    issues.forEach((issue) => {
+    const sortedIssues = [...issues].sort((a, b) => {
+      const ageA = getIssueAgeDays(a.planned_date);
+      const ageB = getIssueAgeDays(b.planned_date);
+
+      if (ageA !== ageB) return ageB - ageA;
+
+      const mpA = Number(a.start_mp ?? 999999);
+      const mpB = Number(b.start_mp ?? 999999);
+
+      if (mpA !== mpB) return mpA - mpB;
+
+      return String(a.job_number || "").localeCompare(
+        String(b.job_number || "")
+      );
+    });
+
+    sortedIssues.forEach((issue) => {
       const key = issue.closure_id || "unknown";
 
       if (!groups[key]) {
@@ -116,24 +160,16 @@ function Issues() {
       groups[key].jobs.push(issue);
     });
 
-    return Object.values(groups).map((group) => ({
-      ...group,
-      jobs: group.jobs.sort((a, b) => {
-        const aMp = Number(a.start_mp ?? 999999);
-        const bMp = Number(b.start_mp ?? 999999);
-
-        if (aMp !== bMp) return aMp - bMp;
-
-        return String(a.job_number || "").localeCompare(
-          String(b.job_number || "")
-        );
-      }),
-    }));
+    return Object.values(groups);
   }, [issues]);
 
   const selectedClosure = closures.find(
     (closure) => String(closure.id) === String(closureId)
   );
+
+  const oldestIssueDays = issues.length
+    ? Math.max(...issues.map((issue) => getIssueAgeDays(issue.planned_date)))
+    : 0;
 
   const scopeLabel =
     date || closureId
@@ -144,7 +180,7 @@ function Issues() {
 
   return (
     <div className="issues-page">
-      <div className="list-page-header">
+      <div className="list-page-header print-hide">
         <div>
           <h1 className="page-title">Issues</h1>
           <p className="page-subtitle">
@@ -152,9 +188,20 @@ function Issues() {
           </p>
         </div>
 
-        <Link to="/dashboard" className="detail-btn detail-btn-secondary">
-          Back to Dashboard
-        </Link>
+        <div className="detail-actions">
+          <button type="button" className="detail-btn" onClick={handlePrint}>
+            Print Issues Report
+          </button>
+
+          <Link to="/dashboard" className="detail-btn detail-btn-secondary">
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+
+      <div className="issues-print-header">
+        <h1>M40 Open Issues Report</h1>
+        <p>{scopeLabel}</p>
       </div>
 
       <div className="dashboard-kpi-grid issues-kpi-grid">
@@ -175,19 +222,27 @@ function Issues() {
             <div className="dashboard-kpi-meta">Grouped by closure</div>
           </div>
         </div>
+
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon icon-yellow">⏱</div>
+          <div className="dashboard-kpi-body">
+            <div className="dashboard-kpi-label">Oldest Issue</div>
+            <div className="dashboard-kpi-value">{oldestIssueDays}</div>
+            <div className="dashboard-kpi-meta">
+              {oldestIssueDays === 1 ? "day open" : "days open"}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="filter-card filter-card-compact">
+      <div className="filter-card filter-card-compact print-hide">
         <div className="filter-grid-compact">
           <div className="form-group">
             <label>Date</label>
             <input
               type="date"
               value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setShowTodayOnly(false);
-              }}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
 
@@ -213,11 +268,7 @@ function Issues() {
 
             <button
               type="button"
-              className={
-                showTodayOnly
-                  ? "detail-btn"
-                  : "detail-btn detail-btn-secondary"
-              }
+              className="detail-btn detail-btn-secondary"
               onClick={loadToday}
             >
               Today
@@ -244,9 +295,7 @@ function Issues() {
       {!loading && groupedIssues.length === 0 && (
         <div className="detail-card issues-empty-card">
           <h2>No open issues found</h2>
-          <p>
-            Nothing to chase in this view. Dangerous sentence, but we’ll take it.
-          </p>
+          <p>No issues to chase for this view.</p>
         </div>
       )}
 
@@ -284,54 +333,66 @@ function Issues() {
                 <thead>
                   <tr>
                     <th>Date</th>
+                    <th>Age</th>
                     <th>Job No</th>
                     <th>Workstream</th>
                     <th>Location</th>
                     <th>MP</th>
                     <th>Description</th>
                     <th>Supervisor Notes</th>
-                    <th>Action</th>
+                    <th className="print-hide">Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {group.jobs.map((job) => (
-                    <tr key={job.id} className="issue-table-row">
-                      <td>{formatDate(job.planned_date)}</td>
+                  {group.jobs.map((job) => {
+                    const ageDays = getIssueAgeDays(job.planned_date);
 
-                      <td>
-                        <Link
-                          to={`/jobs/${job.id}`}
-                          className="table-link-strong"
-                        >
-                          {job.job_number}
-                        </Link>
-                        <div className="issues-work-order">
-                          {job.work_order || ""}
-                        </div>
-                      </td>
+                    return (
+                      <tr key={job.id} className="issue-table-row">
+                        <td>{formatDate(job.planned_date)}</td>
 
-                      <td>{job.workstream || "N/A"}</td>
-                      <td>{job.location || "N/A"}</td>
-                      <td>
-                        {job.start_mp || ""} {job.end_mp ? `- ${job.end_mp}` : ""}
-                      </td>
-                      <td>{job.description || job.activity || job.title || ""}</td>
-                      <td className="issues-notes">
-                        {job.completion_notes || "No notes added."}
-                      </td>
+                        <td>
+                          <span className={getAgeClass(ageDays)}>
+                            {getAgeLabel(ageDays)}
+                          </span>
+                        </td>
 
-                      <td>
-                        <button
-                          type="button"
-                          className="detail-btn detail-btn-secondary issues-resolve-btn"
-                          onClick={() => resolveIssue(job.id)}
-                        >
-                          Resolve
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td>
+                          <Link
+                            to={`/jobs/${job.id}`}
+                            className="table-link-strong"
+                          >
+                            {job.job_number}
+                          </Link>
+                          <div className="issues-work-order">
+                            {job.work_order || ""}
+                          </div>
+                        </td>
+
+                        <td>{job.workstream || "N/A"}</td>
+                        <td>{job.location || "N/A"}</td>
+                        <td>
+                          {job.start_mp || ""}{" "}
+                          {job.end_mp ? `- ${job.end_mp}` : ""}
+                        </td>
+                        <td>{job.description || job.activity || job.title || ""}</td>
+                        <td className="issues-notes">
+                          {job.completion_notes || "No notes added."}
+                        </td>
+
+                        <td className="print-hide">
+                          <button
+                            type="button"
+                            className="detail-btn detail-btn-secondary issues-resolve-btn"
+                            onClick={() => resolveIssue(job.id)}
+                          >
+                            Resolve
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
