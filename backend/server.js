@@ -454,6 +454,7 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
   const dashboardSql = `
     SELECT
       COUNT(*) AS totalJobs,
+      COALESCE(SUM(CASE WHEN issue_flagged = 1 THEN 1 ELSE 0 END), 0) AS issueJobs,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'complete' THEN 1 ELSE 0 END), 0) AS completedJobs,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'planned' THEN 1 ELSE 0 END), 0) AS plannedJobs,
       COALESCE(SUM(CASE WHEN LOWER(status) = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelledJobs,
@@ -545,11 +546,13 @@ app.get("/api/dashboard/overview", auth, (req, res) => {
           const paperworkCheckedJobs = Number(summary.paperworkCheckedJobs || 0);
           const monthlyTotalJobs = Number(summary.monthlyTotalJobs || 0);
           const monthlyCompleteJobs = Number(summary.monthlyCompleteJobs || 0);
+          
 
           res.json({
             filters: { date: date || null, closureId: closureId || null },
             summary: {
               totalJobs,
+              issueJobs: Number(summary.issueJobs || 0),
               completedJobs: Number(summary.completedJobs || 0),
               plannedJobs: Number(summary.plannedJobs || 0),
               cancelledJobs: Number(summary.cancelledJobs || 0),

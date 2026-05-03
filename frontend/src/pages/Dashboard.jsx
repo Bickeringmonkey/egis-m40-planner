@@ -11,6 +11,7 @@ function Dashboard() {
       completedJobs: 0,
       plannedJobs: 0,
       cancelledJobs: 0,
+      issueJobs: 0,
       overallCompletePercent: 0,
       monthlyCompletePercent: 0,
       paperworkCheckedPercent: 0,
@@ -193,7 +194,7 @@ function Dashboard() {
         <div>
           <h1 className="dashboard-title-modern">M40 Operational Dashboard</h1>
           <p className="dashboard-subtitle-modern">
-            Completion, paperwork, sign-off and upcoming works.
+            Completion, paperwork, sign-off, issues and upcoming works.
           </p>
         </div>
 
@@ -329,9 +330,7 @@ function Dashboard() {
                 <div className="dashboard-kpi-value">
                   {summary.totalJobs || 0}
                 </div>
-                <div className="dashboard-kpi-meta">
-                  Current selected view
-                </div>
+                <div className="dashboard-kpi-meta">Current selected view</div>
               </div>
             </div>
 
@@ -369,6 +368,19 @@ function Dashboard() {
                 <div className="dashboard-kpi-value">{jobsRemaining}</div>
                 <div className="dashboard-kpi-meta">
                   Not yet fully signed off
+                </div>
+              </div>
+            </div>
+
+            <div className="dashboard-kpi-card dashboard-kpi-card-danger">
+              <div className="dashboard-kpi-icon icon-red">⚠️</div>
+              <div className="dashboard-kpi-body">
+                <div className="dashboard-kpi-label">Issues Flagged</div>
+                <div className="dashboard-kpi-value">
+                  {summary.issueJobs || 0}
+                </div>
+                <div className="dashboard-kpi-meta">
+                  Jobs marked with an issue
                 </div>
               </div>
             </div>

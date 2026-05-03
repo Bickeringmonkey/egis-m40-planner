@@ -3263,3 +3263,12 @@ tbody tr:nth-child(even),
     grid-template-columns: 1fr;
   }
 }
+.dashboard-kpi-card-danger {
+  border-left: 5px solid #d92d20;
+  background: #fff1f0;
+}
+
+.icon-red {
+  background: #ffe3e0;
+  color: #d92d20;
+}
