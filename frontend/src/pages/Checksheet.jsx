@@ -62,6 +62,7 @@ function Checksheet() {
       job_number: job.job_number,
       supervisor_checked: !!job.supervisor_checked,
       paperwork_checked: !!job.paperwork_checked,
+      issue_flagged: !!job.issue_flagged,
       completion_notes: job.completion_notes || "",
       saved_at: new Date().toISOString(),
     });
@@ -79,6 +80,7 @@ function Checksheet() {
         await api.put(`/jobs/${job.id}/supervisor-check`, {
           supervisor_checked: !!job.supervisor_checked,
           paperwork_checked: !!job.paperwork_checked,
+          issue_flagged: !!job.issue_flagged,
           completion_notes: job.completion_notes || "",
         });
       }
@@ -114,7 +116,9 @@ function Checksheet() {
 
     if (!navigator.onLine) {
       setIsOnline(false);
-      setMessage("Offline — cannot load a new checklist. Existing loaded items can still be saved offline.");
+      setMessage(
+        "Offline — cannot load a new checklist. Existing loaded items can still be saved offline."
+      );
       return;
     }
 
@@ -171,6 +175,7 @@ function Checksheet() {
       await api.put(`/jobs/${job.id}/supervisor-check`, {
         supervisor_checked: !!job.supervisor_checked,
         paperwork_checked: !!job.paperwork_checked,
+        issue_flagged: !!job.issue_flagged,
         completion_notes: job.completion_notes || "",
       });
 
@@ -206,6 +211,7 @@ function Checksheet() {
         await api.put(`/jobs/${job.id}/supervisor-check`, {
           supervisor_checked: !!job.supervisor_checked,
           paperwork_checked: !!job.paperwork_checked,
+          issue_flagged: !!job.issue_flagged,
           completion_notes: job.completion_notes || "",
         });
       }
@@ -238,17 +244,20 @@ function Checksheet() {
     const total = jobs.length;
     const worksComplete = jobs.filter((job) => job.supervisor_checked).length;
     const paperworkComplete = jobs.filter((job) => job.paperwork_checked).length;
+    const issues = jobs.filter((job) => job.issue_flagged).length;
 
     return {
       total,
       worksComplete,
       paperworkComplete,
+      issues,
       worksPercent: total ? Math.round((worksComplete / total) * 100) : 0,
       paperworkPercent: total ? Math.round((paperworkComplete / total) * 100) : 0,
     };
   }, [jobs]);
 
   const getJobStatusLabel = (job) => {
+    if (job.issue_flagged) return "Issue flagged";
     if (job.lead_scheduler_checked) return "Final complete";
     if (job.night_manager_checked) return "Manager checked";
     if (job.paperwork_checked) return "Paperwork checked";
@@ -257,6 +266,7 @@ function Checksheet() {
   };
 
   const getJobStatusClass = (job) => {
+    if (job.issue_flagged) return "mobile-check-status issue";
     if (job.lead_scheduler_checked) return "mobile-check-status complete";
     if (job.night_manager_checked) return "mobile-check-status manager";
     if (job.paperwork_checked) return "mobile-check-status paperwork";
@@ -269,7 +279,7 @@ function Checksheet() {
       <div className="mobile-check-header">
         <div>
           <h1>Closure Checklist</h1>
-          <p>Supervisor sign-off for works and paperwork.</p>
+          <p>Supervisor sign-off for works, issues and paperwork.</p>
         </div>
       </div>
 
@@ -337,7 +347,7 @@ function Checksheet() {
       )}
 
       {jobs.length > 0 && (
-        <div className="mobile-check-progress">
+        <div className="mobile-check-progress mobile-check-progress-issues">
           <div>
             <span>Works</span>
             <strong>
@@ -350,6 +360,11 @@ function Checksheet() {
             <strong>
               {progress.paperworkComplete}/{progress.total} ({progress.paperworkPercent}%)
             </strong>
+          </div>
+
+          <div className={progress.issues > 0 ? "mobile-check-progress-risk" : ""}>
+            <span>Issues</span>
+            <strong>{progress.issues}</strong>
           </div>
 
           <button
@@ -372,7 +387,10 @@ function Checksheet() {
       {!loading && jobs.length > 0 && (
         <div className="mobile-check-list">
           {jobs.map((job) => (
-            <div key={job.id} className="mobile-check-card">
+            <div
+              key={job.id}
+              className={`mobile-check-card ${job.issue_flagged ? "mobile-check-card-issue" : ""}`}
+            >
               <div className="mobile-check-card-top">
                 <div>
                   <h2>{job.job_number}</h2>
@@ -435,6 +453,21 @@ function Checksheet() {
                     }
                   />
                   <span>Paperwork Checked</span>
+                </label>
+
+                <label className="mobile-check-toggle issue">
+                  <input
+                    type="checkbox"
+                    checked={!!job.issue_flagged}
+                    onChange={(e) =>
+                      updateLocalJob(
+                        job.id,
+                        "issue_flagged",
+                        e.target.checked ? 1 : 0
+                      )
+                    }
+                  />
+                  <span>Issue / Could Not Complete</span>
                 </label>
               </div>
 

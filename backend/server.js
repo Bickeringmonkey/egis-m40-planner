@@ -1367,7 +1367,7 @@ app.get(
              jobs.supervisor_checked_at, jobs.paperwork_checked, jobs.paperwork_checked_by,
              jobs.paperwork_checked_at, jobs.night_manager_checked, jobs.night_manager_checked_by,
              jobs.night_manager_checked_at, jobs.lead_scheduler_checked, jobs.lead_scheduler_checked_by,
-             jobs.lead_scheduler_checked_at, jobs.completion_notes, workstreams.name AS workstream,
+             jobs.lead_scheduler_checked_at, jobs.completion_notes, jobs.issue_flagged, workstreams.name AS workstream,
              closures.closure_ref, closures.carriageway, closures.junctions_between,
              closures.lane_configuration, closures.nems_number
       FROM jobs
@@ -1391,10 +1391,17 @@ app.get(
 
 app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor"), (req, res) => {
   const jobId = req.params.id;
-  const { supervisor_checked, paperwork_checked, completion_notes } = req.body;
+  const {
+    supervisor_checked,
+    paperwork_checked,
+    issue_flagged,
+    completion_notes,
+  } = req.body;
 
   if (paperwork_checked && !supervisor_checked) {
-    return res.status(400).json({ error: "Works must be marked complete before paperwork can be checked." });
+    return res.status(400).json({
+      error: "Works must be marked complete before paperwork can be checked.",
+    });
   }
 
   const sql = `
@@ -1405,6 +1412,7 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
         paperwork_checked = ?,
         paperwork_checked_by = ?,
         paperwork_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+        issue_flagged = ?,
         completion_notes = ?
     WHERE id = ?
   `;
@@ -1418,16 +1426,22 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
       paperwork_checked ? 1 : 0,
       paperwork_checked ? req.user.id : null,
       paperwork_checked ? 1 : 0,
+      issue_flagged ? 1 : 0,
       completion_notes || null,
       jobId,
     ],
     (err, result) => {
       if (err) {
         console.error("Supervisor check error:", err);
-        return res.status(500).json({ error: "Failed to save supervisor check" });
+        return res.status(500).json({
+          error: "Failed to save supervisor check",
+        });
       }
 
-      if (result.affectedRows === 0) return res.status(404).json({ error: "Job not found" });
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
       res.json({ message: "Supervisor check saved" });
     }
   );

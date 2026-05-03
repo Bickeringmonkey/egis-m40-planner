@@ -3226,3 +3226,40 @@ tbody tr:nth-child(even),
     display: none !important;
   }
 }
+.mobile-check-toggle.issue {
+  border-color: #f3b5b0;
+  background: #fff5f5;
+  color: #a8071a;
+}
+
+.mobile-check-toggle.issue input {
+  accent-color: #d92d20;
+}
+
+.mobile-check-status.issue {
+  background: #fff1f0;
+  color: #a8071a;
+}
+
+.mobile-check-card-issue {
+  border-color: #f3b5b0;
+  box-shadow: 0 8px 22px rgba(217, 45, 32, 0.12);
+}
+
+.mobile-check-progress-issues {
+  grid-template-columns: 1fr 1fr 1fr auto;
+}
+
+.mobile-check-progress-risk {
+  background: #fff1f0 !important;
+}
+
+.mobile-check-progress-risk strong {
+  color: #a8071a;
+}
+
+@media (max-width: 760px) {
+  .mobile-check-progress-issues {
+    grid-template-columns: 1fr;
+  }
+}
