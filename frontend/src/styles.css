@@ -3152,3 +3152,77 @@ tbody tr:nth-child(even),
     print-color-adjust: exact;
   }
 }
+.supervisor-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.supervisor-actions button {
+  min-height: 34px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.btn-complete {
+  background: #2f9e44;
+  color: white;
+}
+
+.btn-issue {
+  background: #d92d20;
+  color: white;
+}
+
+.btn-reset {
+  background: #6c757d;
+  color: white;
+}
+
+.supervisor-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.supervisor-status-complete {
+  background: #e6f7ec;
+  color: #166534;
+  border-color: #b7ebc6;
+}
+
+.supervisor-status-issue {
+  background: #fff1f0;
+  color: #a8071a;
+  border-color: #ffb4ad;
+}
+
+.supervisor-status-not-started {
+  background: #eef3f6;
+  color: #475467;
+  border-color: #cfd8df;
+}
+
+.nightworks-row-supervisor-complete td {
+  background: #f0fff4 !important;
+}
+
+.nightworks-row-supervisor-issue td {
+  background: #fff1f0 !important;
+  font-weight: 700;
+}
+
+@media print {
+  .supervisor-actions {
+    display: none !important;
+  }
+}
