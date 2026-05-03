@@ -382,6 +382,10 @@ function Dashboard() {
                 <div className="dashboard-kpi-meta">
                   Live operational exceptions
                 </div>
+
+                <Link to="/issues" className="dashboard-panel-link">
+                  View Issues
+                </Link>
               </div>
             </div>
           </div>

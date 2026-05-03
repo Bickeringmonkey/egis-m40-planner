@@ -33,6 +33,7 @@ import LeadSchedulerReview from "./pages/LeadSchedulerReview";
 import Checksheet from "./pages/Checksheet";
 import ExcelImport from "./pages/ExcelImport";
 import ImportJobs from "./pages/ImportJobs";
+import Issues from "./pages/Issues";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -364,6 +365,7 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
+          <Route path="/issues" element={<Issues />} />
 
           <Route
             path="/admin/users"

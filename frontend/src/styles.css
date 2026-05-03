@@ -3310,3 +3310,89 @@ tbody tr:nth-child(even),
     grid-template-columns: 1fr;
   }
 }
+.job-issue-low {
+  background: #fffbe6;
+}
+
+.job-issue-medium {
+  background: #fff3e0;
+}
+
+.job-issue-high {
+  background: #ffe3e0;
+  border-left: 4px solid #d92d20;
+}
+.issues-page {
+  max-width: 1400px;
+}
+
+.issues-kpi-grid {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.issues-empty-card {
+  padding: 24px;
+}
+
+.issues-empty-card h2 {
+  margin-top: 0;
+}
+
+.issues-group {
+  margin-bottom: 22px;
+}
+
+.issues-group-header {
+  background: #09212c;
+}
+
+.issue-count-pill {
+  background: #d92d20;
+}
+
+.issues-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.issues-table th,
+.issues-table td {
+  padding: 12px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.issue-table-row td {
+  background: #fff7f7;
+}
+
+.issue-table-row td:first-child {
+  border-left: 5px solid #d92d20;
+}
+
+.issues-work-order {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.issues-notes {
+  font-weight: 700;
+  color: #a8071a;
+}
+
+.issues-resolve-btn {
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .issues-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .issues-table {
+    min-width: 950px;
+  }
+}

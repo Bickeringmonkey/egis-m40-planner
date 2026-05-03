@@ -940,6 +940,93 @@ app.delete("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) =>
     res.json({ message: "Job deleted successfully" });
   });
 });
+app.get(
+  "/api/issues",
+  auth,
+  requireRole("admin", "planner", "supervisor", "night_manager", "lead_scheduler"),
+  (req, res) => {
+    const { date, closureId } = req.query;
+
+    const filters = ["jobs.issue_flagged = 1"];
+    const params = [];
+
+    if (date) {
+      filters.push("jobs.planned_date = ?");
+      params.push(date);
+    }
+
+    if (closureId) {
+      filters.push("jobs.closure_id = ?");
+      params.push(closureId);
+    }
+
+    const sql = `
+      SELECT 
+        jobs.id,
+        jobs.job_number,
+        jobs.title,
+        jobs.work_order,
+        jobs.activity,
+        jobs.location,
+        jobs.description,
+        jobs.start_mp,
+        jobs.end_mp,
+        jobs.status,
+        jobs.planned_date,
+        jobs.completion_notes,
+        jobs.issue_flagged,
+        jobs.closure_id,
+        workstreams.name AS workstream,
+        closures.closure_ref,
+        closures.carriageway,
+        closures.junctions_between,
+        closures.lane_configuration,
+        closures.nems_number
+      FROM jobs
+      LEFT JOIN closures ON jobs.closure_id = closures.id
+      LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+      WHERE ${filters.join(" AND ")}
+      ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
+    `;
+
+    db.query(sql, params, (err, results) => {
+      if (err) {
+        console.error("Issues fetch error:", err);
+        return res.status(500).json({ error: "Failed to fetch issues" });
+      }
+
+      res.json(results);
+    });
+  }
+);
+
+app.put(
+  "/api/jobs/:id/resolve-issue",
+  auth,
+  requireRole("admin", "planner", "supervisor", "night_manager", "lead_scheduler"),
+  (req, res) => {
+    const jobId = req.params.id;
+
+    const sql = `
+      UPDATE jobs
+      SET issue_flagged = 0
+      WHERE id = ?
+    `;
+
+    db.query(sql, [jobId], (err, result) => {
+      if (err) {
+        console.error("Resolve issue error:", err);
+        return res.status(500).json({ error: "Failed to resolve issue" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      res.json({ message: "Issue resolved" });
+    });
+  }
+);
 
 // -----------------------------
 // Smart Excel Job Import
