@@ -1519,28 +1519,7 @@ app.put("/api/jobs/:id/lead-scheduler-check", auth, requireRole("admin", "lead_s
     );
   });
 });
-app.put("/jobs/:id/supervisor", auth, async (req, res) => {
-  const { id } = req.params;
-  const { status, notes } = req.body;
 
-  try {
-    await db.query(
-      `
-      UPDATE jobs
-      SET supervisor_status = ?,
-          supervisor_notes = ?,
-          supervisor_updated_at = NOW()
-      WHERE id = ?
-      `,
-      [status, notes || null, id]
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Supervisor update error:", err);
-    res.status(500).json({ error: "Failed to update job" });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

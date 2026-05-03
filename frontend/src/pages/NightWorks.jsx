@@ -9,9 +9,7 @@ function NightWorks() {
   const [closures, setClosures] = useState([]);
   const [nightWorks, setNightWorks] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [savingJobId, setSavingJobId] = useState(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
   const effectiveEndDate = endDate || startDate;
 
@@ -23,21 +21,16 @@ function NightWorks() {
   const fetchClosures = async () => {
     try {
       const response = await api.get("/closures");
-      setClosures(response.data || []);
+      setClosures(response.data);
     } catch (err) {
       console.error("Error fetching closures:", err);
     }
   };
 
-  const fetchNightWorks = async (
-    selectedStartDate,
-    selectedEndDate,
-    selectedClosureId
-  ) => {
+  const fetchNightWorks = async (selectedStartDate, selectedEndDate, selectedClosureId) => {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
 
       let url = `/nightworks?startDate=${selectedStartDate}&endDate=${selectedEndDate}`;
 
@@ -46,42 +39,12 @@ function NightWorks() {
       }
 
       const response = await api.get(url);
-      setNightWorks(response.data || []);
+      setNightWorks(response.data);
     } catch (err) {
       console.error("Error fetching night works:", err);
       setError("Failed to load night works.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const updateSupervisor = async (jobId, supervisorStatus) => {
-    try {
-      setSavingJobId(jobId);
-      setMessage("");
-
-      await api.put(`/jobs/${jobId}/supervisor`, {
-        status: supervisorStatus,
-      });
-
-      setNightWorks((prev) =>
-        prev.map((job) =>
-          job.id === jobId
-            ? {
-                ...job,
-                supervisor_status: supervisorStatus,
-                supervisor_updated_at: new Date().toISOString(),
-              }
-            : job
-        )
-      );
-
-      setMessage("Supervisor update saved.");
-    } catch (err) {
-      console.error("Supervisor update failed:", err);
-      setError(err.response?.data?.error || "Failed to update supervisor status.");
-    } finally {
-      setSavingJobId(null);
     }
   };
 
@@ -101,7 +64,6 @@ function NightWorks() {
 
   const formatDateRange = () => {
     if (!startDate) return "";
-
     if (!effectiveEndDate || startDate === effectiveEndDate) {
       return formatDate(startDate);
     }
@@ -111,45 +73,11 @@ function NightWorks() {
 
   const getStatusClass = (status) => {
     if (!status) return "status-badge";
-
-    const clean = status.toLowerCase().trim();
-
+    const clean = status.toLowerCase();
     if (clean === "planned") return "status-badge status-planned";
-    if (clean === "complete" || clean === "completed") {
-      return "status-badge status-complete";
-    }
-    if (clean === "cancelled" || clean === "canceled") {
-      return "status-badge status-cancelled";
-    }
-
+    if (clean === "complete") return "status-badge status-complete";
+    if (clean === "cancelled") return "status-badge status-cancelled";
     return "status-badge";
-  };
-
-  const getSupervisorStatusClass = (status) => {
-    const clean = String(status || "not_started").toLowerCase().trim();
-
-    if (clean === "complete") return "supervisor-status supervisor-status-complete";
-    if (clean === "issue") return "supervisor-status supervisor-status-issue";
-
-    return "supervisor-status supervisor-status-not-started";
-  };
-
-  const getSupervisorStatusLabel = (status) => {
-    const clean = String(status || "not_started").toLowerCase().trim();
-
-    if (clean === "complete") return "Done";
-    if (clean === "issue") return "Issue";
-
-    return "Not Started";
-  };
-
-  const getSupervisorRowClass = (status) => {
-    const clean = String(status || "not_started").toLowerCase().trim();
-
-    if (clean === "complete") return "nightworks-row-supervisor-complete";
-    if (clean === "issue") return "nightworks-row-supervisor-issue";
-
-    return "";
   };
 
   const getClosureDateLabel = (closure) => {
@@ -190,40 +118,11 @@ function NightWorks() {
       groups[key].jobs.push(job);
     });
 
-    return Object.values(groups).map((group) => ({
-      ...group,
-      jobs: group.jobs.sort((a, b) => {
-        const aMp = Number(a.start_mp ?? 999999);
-        const bMp = Number(b.start_mp ?? 999999);
-
-        if (aMp !== bMp) return aMp - bMp;
-
-        const aEnd = Number(a.end_mp ?? 999999);
-        const bEnd = Number(b.end_mp ?? 999999);
-
-        if (aEnd !== bEnd) return aEnd - bEnd;
-
-        return String(a.job_number || "").localeCompare(
-          String(b.job_number || "")
-        );
-      }),
-    }));
+    return Object.values(groups);
   }, [nightWorks]);
 
   const totalJobs = nightWorks.length;
   const totalClosures = groupedNightWorks.length;
-
-  const supervisorComplete = nightWorks.filter(
-    (job) => job.supervisor_status === "complete"
-  ).length;
-
-  const supervisorIssues = nightWorks.filter(
-    (job) => job.supervisor_status === "issue"
-  ).length;
-
-  const supervisorNotStarted = nightWorks.filter(
-    (job) => !job.supervisor_status || job.supervisor_status === "not_started"
-  ).length;
 
   return (
     <div className="nightworks-page">
@@ -245,21 +144,6 @@ function NightWorks() {
           <div className="stat-card">
             <h3>Total Jobs</h3>
             <p>{totalJobs}</p>
-          </div>
-
-          <div className="stat-card">
-            <h3>Supervisor Done</h3>
-            <p>{supervisorComplete}</p>
-          </div>
-
-          <div className="stat-card">
-            <h3>Issues</h3>
-            <p>{supervisorIssues}</p>
-          </div>
-
-          <div className="stat-card">
-            <h3>Not Started</h3>
-            <p>{supervisorNotStarted}</p>
           </div>
         </div>
 
@@ -317,9 +201,8 @@ function NightWorks() {
         </div>
       </div>
 
-      {message && <p className="form-message">{message}</p>}
       {loading && <p>Loading night works...</p>}
-      {error && <p className="form-message">{error}</p>}
+      {error && <p>{error}</p>}
 
       {!loading && !error && groupedNightWorks.length === 0 && (
         <div className="card">
@@ -334,9 +217,7 @@ function NightWorks() {
             <div className="closure-group-header">
               <div>
                 <h2>
-                  <Link to={`/closures/${group.closure_id}`}>
-                    {group.closure_ref}
-                  </Link>
+                  <Link to={`/closures/${group.closure_id}`}>{group.closure_ref}</Link>
                 </h2>
 
                 <p>
@@ -368,17 +249,12 @@ function NightWorks() {
                     <th>Workstream</th>
                     <th>Description</th>
                     <th>Status</th>
-                    <th>Supervisor</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {group.jobs.map((job) => (
-                    <tr
-                      key={job.id}
-                      className={getSupervisorRowClass(job.supervisor_status)}
-                    >
+                    <tr key={job.id}>
                       <td>{formatDate(job.planned_date)}</td>
 
                       <td>
@@ -392,46 +268,7 @@ function NightWorks() {
                       <td>{job.description || ""}</td>
 
                       <td>
-                        <span className={getStatusClass(job.status)}>
-                          {job.status}
-                        </span>
-                      </td>
-
-                      <td>
-                        <span className={getSupervisorStatusClass(job.supervisor_status)}>
-                          {getSupervisorStatusLabel(job.supervisor_status)}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div className="supervisor-actions">
-                          <button
-                            type="button"
-                            className="btn-complete"
-                            disabled={savingJobId === job.id}
-                            onClick={() => updateSupervisor(job.id, "complete")}
-                          >
-                            Done
-                          </button>
-
-                          <button
-                            type="button"
-                            className="btn-issue"
-                            disabled={savingJobId === job.id}
-                            onClick={() => updateSupervisor(job.id, "issue")}
-                          >
-                            Issue
-                          </button>
-
-                          <button
-                            type="button"
-                            className="btn-reset"
-                            disabled={savingJobId === job.id}
-                            onClick={() => updateSupervisor(job.id, "not_started")}
-                          >
-                            Reset
-                          </button>
-                        </div>
+                        <span className={getStatusClass(job.status)}>{job.status}</span>
                       </td>
                     </tr>
                   ))}
