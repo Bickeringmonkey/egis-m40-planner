@@ -1002,9 +1002,6 @@ app.get(
 
         jobs.issue_flagged,
         jobs.issue_reason,
-        jobs.issue_severity,
-        jobs.issue_type,
-        jobs.issue_created_at,
         jobs.issue_resolved_at,
         jobs.issue_resolved_by,
 
@@ -1024,12 +1021,16 @@ app.get(
       LEFT JOIN closures ON jobs.closure_id = closures.id
       LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
       WHERE ${filters.join(" AND ")}
+      ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
     `;
 
     db.query(sql, params, (err, results) => {
       if (err) {
         console.error("Issues fetch error:", err);
-        return res.status(500).json({ error: "Failed to fetch issues" });
+        return res.status(500).json({
+          error: "Failed to fetch issues",
+          details: err.message,
+        });
       }
 
       const now = new Date();
@@ -1038,12 +1039,7 @@ app.get(
       const mapped = results.map((job) => {
         const issueReason = getIssueReason(job);
 
-        // 🔥 Use issue_created_at if available, fallback to planned_date
-        const baseDate = job.issue_created_at
-          ? new Date(job.issue_created_at)
-          : job.planned_date
-          ? new Date(job.planned_date)
-          : null;
+        const baseDate = job.planned_date ? new Date(job.planned_date) : null;
 
         if (baseDate) baseDate.setHours(0, 0, 0, 0);
 
@@ -1051,8 +1047,8 @@ app.get(
           ? Math.max(Math.floor((now - baseDate) / (1000 * 60 * 60 * 24)), 0)
           : 0;
 
-        // 🚨 Escalation logic
         let escalation_status = "green";
+
         if (ageDays >= 4) {
           escalation_status = "red";
         } else if (ageDays >= 2) {
@@ -1065,10 +1061,14 @@ app.get(
           issue_age_days: ageDays,
           escalation_status,
           issue_escalated: escalation_status === "red" ? 1 : 0,
+
+          // Safe defaults until these DB columns are added
+          issue_severity: job.issue_severity || "low",
+          issue_type: job.issue_type || "other",
+          issue_created_at: job.issue_created_at || null,
         };
       });
 
-      // 🔥 Sort properly: worst issues first
       mapped.sort((a, b) => {
         const priority = { red: 1, amber: 2, green: 3 };
 
