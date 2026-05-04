@@ -838,14 +838,19 @@ app.delete("/api/closures/:id", auth, requireRole("admin", "planner"), (req, res
 // -----------------------------
 app.get("/api/jobs", auth, (req, res) => {
   const sql = `
-    SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
-           jobs.description, jobs.activity_code, jobs.closure_id, jobs.start_mp, jobs.end_mp,
-           jobs.status, jobs.planned_date, closures.closure_ref, closures.closure_date,
-           closures.start_date, closures.end_date, workstreams.name AS workstream
-    FROM jobs
-    LEFT JOIN closures ON jobs.closure_id = closures.id
-    LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
-    ORDER BY jobs.planned_date, jobs.job_number
+   SELECT jobs.id, jobs.job_number, jobs.title, jobs.work_order, jobs.activity, jobs.location,
+       jobs.description, jobs.activity_code, jobs.closure_id, jobs.start_mp, jobs.end_mp,
+       jobs.status, jobs.planned_date, closures.closure_ref, closures.closure_date,
+       closures.start_date, closures.end_date, workstreams.name AS workstream,
+       COALESCE(subcontractors.company_name, '—') AS subcontractor_name,
+       COALESCE(subcontractor_contacts.contact_name, '—') AS subcontractor_contact_name,
+       COALESCE(subcontractor_contacts.phone, '—') AS subcontractor_contact_phone
+FROM jobs
+LEFT JOIN closures ON jobs.closure_id = closures.id
+LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+LEFT JOIN subcontractors ON jobs.subcontractor_id = subcontractors.id
+LEFT JOIN subcontractor_contacts ON jobs.subcontractor_contact_id = subcontractor_contacts.id
+ORDER BY jobs.planned_date, jobs.job_number
   `;
 
   db.query(sql, (err, results) => {
@@ -902,21 +907,60 @@ app.get("/api/jobs/:id", auth, (req, res) => {
 });
 
 app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
-  const { job_number, title, work_order, activity, location, description, activity_code, closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes } = req.body;
+  const {
+    job_number,
+    title,
+    work_order,
+    activity,
+    location,
+    description,
+    activity_code,
+    closure_id,
+    workstream_id,
+    subcontractor_id,
+    subcontractor_contact_id,
+    start_mp,
+    end_mp,
+    status,
+    planned_date,
+    notes,
+  } = req.body;
 
   const sql = `
     INSERT INTO jobs (
       job_number, title, work_order, activity, location, description, activity_code,
-      closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes
+      closure_id, workstream_id, subcontractor_id, subcontractor_contact_id,
+      start_mp, end_mp, status, planned_date, notes
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
     sql,
-    [job_number, title || null, work_order || null, activity || null, location || null, description || null, activity_code || null, closure_id, workstream_id, start_mp || null, end_mp || null, status || null, planned_date || null, notes || null],
+    [
+      job_number,
+      title || null,
+      work_order || null,
+      activity || null,
+      location || null,
+      description || null,
+      activity_code || null,
+      closure_id,
+      workstream_id,
+      subcontractor_id || null,
+      subcontractor_contact_id || null,
+      start_mp || null,
+      end_mp || null,
+      status || null,
+      planned_date || null,
+      notes || null,
+    ],
     (err, result) => {
-      if (err) return res.status(500).json({ error: "Insert failed" });
+      if (err) {
+        console.error("Job insert error:", err);
+        return res.status(500).json({ error: "Insert failed" });
+      }
+
       res.json({ message: "Job created", id: result.insertId });
     }
   );

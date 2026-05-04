@@ -4249,3 +4249,70 @@ tbody tr:nth-child(even),
     grid-column: 1 / -1;
   }
 }
+.subcontractor-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.subcontractor-contacts-card {
+  grid-column: 1 / -1;
+}
+
+.subcontractor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subcontractor-list-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid #d6e0e5;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.subcontractor-list-item strong {
+  display: block;
+  color: #09212c;
+}
+
+.subcontractor-list-item span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: #5f6b72;
+}
+
+.subcontractor-list-item-active {
+  border-color: #00617e;
+  background: #eef8fb;
+}
+
+.contact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .subcontractor-layout,
+  .contact-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .subcontractor-contacts-card {
+    grid-column: auto;
+  }
+}

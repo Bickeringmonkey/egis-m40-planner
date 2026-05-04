@@ -34,6 +34,7 @@ import Checksheet from "./pages/Checksheet";
 import ExcelImport from "./pages/ExcelImport";
 import ImportJobs from "./pages/ImportJobs";
 import Issues from "./pages/Issues";
+import Subcontractors from "./pages/Subcontractors";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -110,6 +111,12 @@ function AppShell() {
           label: "Final Completion",
           icon: CheckCircle2,
           roles: ["admin", "lead_scheduler"],
+        },
+        {
+          to: "/subcontractors",
+          label: "Subcontractors",
+          icon: Users,
+          roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
         },
       ],
     },
@@ -348,6 +355,14 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
+        <Route
+            path="/subcontractors"
+            element={
+              <ProtectedRoute roles={["admin", "planner", "viewer", "night_manager", "lead_scheduler"]}>
+                <Subcontractors />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/excel-import"
@@ -376,6 +391,7 @@ function AppShell() {
             }
           />
         </Routes>
+        
       </main>
     </div>
   );

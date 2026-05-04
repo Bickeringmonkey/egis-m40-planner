@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import { statusOptions } from "../constants/statusOptions";
 
@@ -13,6 +13,8 @@ function AddJob() {
     activity_code: "",
     closure_id: "",
     workstream_id: "",
+    subcontractor_id: "",
+    subcontractor_contact_id: "",
     start_mp: "",
     end_mp: "",
     status: "Planned",
@@ -22,18 +24,22 @@ function AddJob() {
 
   const [closures, setClosures] = useState([]);
   const [workstreams, setWorkstreams] = useState([]);
+  const [subcontractors, setSubcontractors] = useState([]);
+  const [contacts, setContacts] = useState([]);
+
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("");
 
   useEffect(() => {
     fetchClosures();
     fetchWorkstreams();
+    fetchSubcontractors();
   }, []);
 
   const fetchClosures = async () => {
     try {
       const response = await api.get("/closures");
-      setClosures(response.data);
+      setClosures(response.data || []);
     } catch (err) {
       console.error("Error loading closures:", err);
       setMessage("Failed to load closures.");
@@ -44,7 +50,7 @@ function AddJob() {
   const fetchWorkstreams = async () => {
     try {
       const response = await api.get("/workstreams");
-      setWorkstreams(response.data);
+      setWorkstreams(response.data || []);
     } catch (err) {
       console.error("Error loading workstreams:", err);
       setMessage("Failed to load workstreams.");
@@ -52,11 +58,62 @@ function AddJob() {
     }
   };
 
+  const fetchSubcontractors = async () => {
+    try {
+      const response = await api.get("/subcontractors");
+      setSubcontractors(response.data || []);
+    } catch (err) {
+      console.error("Error loading subcontractors:", err);
+      setMessage("Failed to load subcontractors.");
+      setMessageType("error");
+    }
+  };
+
+  const fetchContacts = async (subcontractorId) => {
+    if (!subcontractorId) {
+      setContacts([]);
+      return;
+    }
+
+    try {
+      const response = await api.get(`/subcontractors/${subcontractorId}/contacts`);
+      setContacts(response.data || []);
+    } catch (err) {
+      console.error("Error loading subcontractor contacts:", err);
+      setContacts([]);
+      setMessage("Failed to load subcontractor contacts.");
+      setMessageType("error");
+    }
+  };
+
+  const activeSubcontractors = useMemo(
+    () => subcontractors.filter((sub) => Number(sub.is_active) === 1),
+    [subcontractors]
+  );
+
+  const activeContacts = useMemo(
+    () => contacts.filter((contact) => Number(contact.is_active) === 1),
+    [contacts]
+  );
+
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    if (name === "subcontractor_id") {
+      setForm((prev) => ({
+        ...prev,
+        subcontractor_id: value,
+        subcontractor_contact_id: "",
+      }));
+
+      fetchContacts(value);
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const resetForm = () => {
@@ -70,12 +127,16 @@ function AddJob() {
       activity_code: "",
       closure_id: "",
       workstream_id: "",
+      subcontractor_id: "",
+      subcontractor_contact_id: "",
       start_mp: "",
       end_mp: "",
       status: "Planned",
       planned_date: "",
       notes: "",
     });
+
+    setContacts([]);
   };
 
   const handleSubmit = async (e) => {
@@ -95,13 +156,18 @@ function AddJob() {
     }
 
     try {
-      await api.post("/jobs", form);
+      await api.post("/jobs", {
+        ...form,
+        subcontractor_id: form.subcontractor_id || null,
+        subcontractor_contact_id: form.subcontractor_contact_id || null,
+      });
+
       setMessage("Job created successfully.");
       setMessageType("success");
       resetForm();
     } catch (err) {
       console.error("Error creating job:", err);
-      setMessage("Error creating job.");
+      setMessage(err.response?.data?.error || "Error creating job.");
       setMessageType("error");
     }
   };
@@ -214,6 +280,45 @@ function AddJob() {
                 {workstreams.map((workstream) => (
                   <option key={workstream.id} value={workstream.id}>
                     {workstream.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="subcontractor_id">Subcontractor</label>
+              <select
+                id="subcontractor_id"
+                name="subcontractor_id"
+                value={form.subcontractor_id}
+                onChange={handleChange}
+              >
+                <option value="">No subcontractor</option>
+                {activeSubcontractors.map((subcontractor) => (
+                  <option key={subcontractor.id} value={subcontractor.id}>
+                    {subcontractor.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="subcontractor_contact_id">Subcontractor Contact</label>
+              <select
+                id="subcontractor_contact_id"
+                name="subcontractor_contact_id"
+                value={form.subcontractor_contact_id}
+                onChange={handleChange}
+                disabled={!form.subcontractor_id}
+              >
+                <option value="">
+                  {form.subcontractor_id ? "Select a contact" : "Select subcontractor first"}
+                </option>
+                {activeContacts.map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.contact_name}
+                    {contact.phone ? ` - ${contact.phone}` : ""}
+                    {contact.is_primary ? " (Primary)" : ""}
                   </option>
                 ))}
               </select>
