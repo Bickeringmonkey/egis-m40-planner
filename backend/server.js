@@ -1359,7 +1359,285 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
     });
   });
 });
+// -----------------------------
+// Subcontractors
+// -----------------------------
+app.get("/api/subcontractors", auth, (req, res) => {
+  const sql = `
+    SELECT 
+      id,
+      company_name,
+      notes,
+      is_active,
+      created_at
+    FROM subcontractors
+    ORDER BY company_name
+  `;
 
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Fetch subcontractors error:", err);
+      return res.status(500).json({ error: "Failed to fetch subcontractors" });
+    }
+
+    res.json(results);
+  });
+});
+
+app.post(
+  "/api/subcontractors",
+  auth,
+  requireRole("admin", "planner"),
+  (req, res) => {
+    const { company_name, notes } = req.body;
+
+    if (!company_name || !company_name.trim()) {
+      return res.status(400).json({ error: "Subcontractor name is required" });
+    }
+
+    const sql = `
+      INSERT INTO subcontractors (company_name, notes, is_active)
+      VALUES (?, ?, 1)
+    `;
+
+    db.query(sql, [company_name.trim(), notes || null], (err, result) => {
+      if (err) {
+        console.error("Create subcontractor error:", err);
+        return res.status(500).json({ error: "Failed to create subcontractor" });
+      }
+
+      res.json({
+        message: "Subcontractor created",
+        id: result.insertId,
+      });
+    });
+  }
+);
+
+app.put(
+  "/api/subcontractors/:id",
+  auth,
+  requireRole("admin", "planner"),
+  (req, res) => {
+    const { company_name, notes, is_active } = req.body;
+
+    if (!company_name || !company_name.trim()) {
+      return res.status(400).json({ error: "Subcontractor name is required" });
+    }
+
+    const sql = `
+      UPDATE subcontractors
+      SET company_name = ?,
+          notes = ?,
+          is_active = ?
+      WHERE id = ?
+    `;
+
+    db.query(
+      sql,
+      [
+        company_name.trim(),
+        notes || null,
+        is_active ? 1 : 0,
+        req.params.id,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error("Update subcontractor error:", err);
+          return res.status(500).json({ error: "Failed to update subcontractor" });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: "Subcontractor not found" });
+        }
+
+        res.json({ message: "Subcontractor updated" });
+      }
+    );
+  }
+);
+
+app.get("/api/subcontractors/:id/contacts", auth, (req, res) => {
+  const sql = `
+    SELECT 
+      id,
+      subcontractor_id,
+      contact_name,
+      phone,
+      email,
+      role,
+      is_primary,
+      is_active,
+      created_at
+    FROM subcontractor_contacts
+    WHERE subcontractor_id = ?
+    ORDER BY is_primary DESC, contact_name
+  `;
+
+  db.query(sql, [req.params.id], (err, results) => {
+    if (err) {
+      console.error("Fetch subcontractor contacts error:", err);
+      return res.status(500).json({ error: "Failed to fetch contacts" });
+    }
+
+    res.json(results);
+  });
+});
+
+app.post(
+  "/api/subcontractors/:id/contacts",
+  auth,
+  requireRole("admin", "planner"),
+  (req, res) => {
+    const { contact_name, phone, email, role, is_primary } = req.body;
+    const subcontractorId = req.params.id;
+
+    if (!contact_name || !contact_name.trim()) {
+      return res.status(400).json({ error: "Contact name is required" });
+    }
+
+    const insertContact = () => {
+      const sql = `
+        INSERT INTO subcontractor_contacts (
+          subcontractor_id,
+          contact_name,
+          phone,
+          email,
+          role,
+          is_primary,
+          is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+      `;
+
+      db.query(
+        sql,
+        [
+          subcontractorId,
+          contact_name.trim(),
+          phone || null,
+          email || null,
+          role || null,
+          is_primary ? 1 : 0,
+        ],
+        (err, result) => {
+          if (err) {
+            console.error("Create subcontractor contact error:", err);
+            return res.status(500).json({ error: "Failed to create contact" });
+          }
+
+          res.json({
+            message: "Contact created",
+            id: result.insertId,
+          });
+        }
+      );
+    };
+
+    if (is_primary) {
+      db.query(
+        `UPDATE subcontractor_contacts SET is_primary = 0 WHERE subcontractor_id = ?`,
+        [subcontractorId],
+        (clearErr) => {
+          if (clearErr) {
+            console.error("Clear primary contact error:", clearErr);
+            return res.status(500).json({ error: "Failed to update primary contact" });
+          }
+
+          insertContact();
+        }
+      );
+    } else {
+      insertContact();
+    }
+  }
+);
+
+app.put(
+  "/api/subcontractor-contacts/:id",
+  auth,
+  requireRole("admin", "planner"),
+  (req, res) => {
+    const { contact_name, phone, email, role, is_primary, is_active } = req.body;
+    const contactId = req.params.id;
+
+    if (!contact_name || !contact_name.trim()) {
+      return res.status(400).json({ error: "Contact name is required" });
+    }
+
+    db.query(
+      `SELECT subcontractor_id FROM subcontractor_contacts WHERE id = ?`,
+      [contactId],
+      (findErr, findResults) => {
+        if (findErr) {
+          console.error("Find contact error:", findErr);
+          return res.status(500).json({ error: "Failed to find contact" });
+        }
+
+        if (findResults.length === 0) {
+          return res.status(404).json({ error: "Contact not found" });
+        }
+
+        const subcontractorId = findResults[0].subcontractor_id;
+
+        const updateContact = () => {
+          const sql = `
+            UPDATE subcontractor_contacts
+            SET contact_name = ?,
+                phone = ?,
+                email = ?,
+                role = ?,
+                is_primary = ?,
+                is_active = ?
+            WHERE id = ?
+          `;
+
+          db.query(
+            sql,
+            [
+              contact_name.trim(),
+              phone || null,
+              email || null,
+              role || null,
+              is_primary ? 1 : 0,
+              is_active ? 1 : 0,
+              contactId,
+            ],
+            (err, result) => {
+              if (err) {
+                console.error("Update contact error:", err);
+                return res.status(500).json({ error: "Failed to update contact" });
+              }
+
+              if (result.affectedRows === 0) {
+                return res.status(404).json({ error: "Contact not found" });
+              }
+
+              res.json({ message: "Contact updated" });
+            }
+          );
+        };
+
+        if (is_primary) {
+          db.query(
+            `UPDATE subcontractor_contacts SET is_primary = 0 WHERE subcontractor_id = ?`,
+            [subcontractorId],
+            (clearErr) => {
+              if (clearErr) {
+                console.error("Clear primary contact error:", clearErr);
+                return res.status(500).json({ error: "Failed to update primary contact" });
+              }
+
+              updateContact();
+            }
+          );
+        } else {
+          updateContact();
+        }
+      }
+    );
+  }
+);
 // -----------------------------
 // Night works
 // -----------------------------
