@@ -999,15 +999,8 @@ app.get(
         jobs.status,
         jobs.planned_date,
         jobs.completion_notes,
-
         jobs.issue_flagged,
         jobs.issue_reason,
-        jobs.issue_severity,
-        jobs.issue_type,
-        jobs.issue_created_at,
-        jobs.issue_resolved_at,
-        jobs.issue_resolved_by,
-
         jobs.supervisor_checked,
         jobs.paperwork_checked,
         jobs.lead_scheduler_checked,
@@ -1024,35 +1017,50 @@ app.get(
       LEFT JOIN closures ON jobs.closure_id = closures.id
       LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
       WHERE ${filters.join(" AND ")}
+      ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
     `;
 
     db.query(sql, params, (err, results) => {
       if (err) {
-        console.error("Issues fetch error:", err);
-        return res.status(500).json({ error: "Failed to fetch issues" });
+        console.error("Issues fetch SQL error:", err);
+        return res.status(500).json({
+          error: "Failed to fetch issues",
+          details: err.message,
+          sqlMessage: err.sqlMessage,
+        });
       }
 
       const now = new Date();
       now.setHours(0, 0, 0, 0);
 
       const mapped = results.map((job) => {
-        const issueReason = getIssueReason(job);
+        const planned = job.planned_date ? new Date(job.planned_date) : null;
 
-        // 🔥 Use issue_created_at if available, fallback to planned_date
-        const baseDate = job.issue_created_at
-          ? new Date(job.issue_created_at)
-          : job.planned_date
-          ? new Date(job.planned_date)
-          : null;
+        if (planned) planned.setHours(0, 0, 0, 0);
 
-        if (baseDate) baseDate.setHours(0, 0, 0, 0);
-
-        const ageDays = baseDate
-          ? Math.max(Math.floor((now - baseDate) / (1000 * 60 * 60 * 24)), 0)
+        const ageDays = planned
+          ? Math.max(Math.floor((now - planned) / (1000 * 60 * 60 * 24)), 0)
           : 0;
 
-        // 🚨 Escalation logic
+        let issueReason = job.issue_reason || "Issue flagged";
+
+        if (
+          job.supervisor_checked === 1 &&
+          job.paperwork_checked === 0
+        ) {
+          issueReason = "Paperwork missing";
+        }
+
+        if (
+          job.issue_flagged !== 1 &&
+          job.planned_date &&
+          job.lead_scheduler_checked === 0
+        ) {
+          issueReason = "Works not completed";
+        }
+
         let escalation_status = "green";
+
         if (ageDays >= 4) {
           escalation_status = "red";
         } else if (ageDays >= 2) {
@@ -1065,18 +1073,10 @@ app.get(
           issue_age_days: ageDays,
           escalation_status,
           issue_escalated: escalation_status === "red" ? 1 : 0,
+          issue_severity: "low",
+          issue_type: "other",
+          issue_created_at: null,
         };
-      });
-
-      // 🔥 Sort properly: worst issues first
-      mapped.sort((a, b) => {
-        const priority = { red: 1, amber: 2, green: 3 };
-
-        if (priority[a.escalation_status] !== priority[b.escalation_status]) {
-          return priority[a.escalation_status] - priority[b.escalation_status];
-        }
-
-        return b.issue_age_days - a.issue_age_days;
       });
 
       res.json(mapped);
