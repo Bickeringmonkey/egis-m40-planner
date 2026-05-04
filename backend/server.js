@@ -999,12 +999,8 @@ app.get(
         jobs.status,
         jobs.planned_date,
         jobs.completion_notes,
-
         jobs.issue_flagged,
         jobs.issue_reason,
-        jobs.issue_resolved_at,
-        jobs.issue_resolved_by,
-
         jobs.supervisor_checked,
         jobs.paperwork_checked,
         jobs.lead_scheduler_checked,
@@ -1026,10 +1022,11 @@ app.get(
 
     db.query(sql, params, (err, results) => {
       if (err) {
-        console.error("Issues fetch error:", err);
+        console.error("Issues fetch SQL error:", err);
         return res.status(500).json({
           error: "Failed to fetch issues",
           details: err.message,
+          sqlMessage: err.sqlMessage,
         });
       }
 
@@ -1037,15 +1034,30 @@ app.get(
       now.setHours(0, 0, 0, 0);
 
       const mapped = results.map((job) => {
-        const issueReason = getIssueReason(job);
+        const planned = job.planned_date ? new Date(job.planned_date) : null;
 
-        const baseDate = job.planned_date ? new Date(job.planned_date) : null;
+        if (planned) planned.setHours(0, 0, 0, 0);
 
-        if (baseDate) baseDate.setHours(0, 0, 0, 0);
-
-        const ageDays = baseDate
-          ? Math.max(Math.floor((now - baseDate) / (1000 * 60 * 60 * 24)), 0)
+        const ageDays = planned
+          ? Math.max(Math.floor((now - planned) / (1000 * 60 * 60 * 24)), 0)
           : 0;
+
+        let issueReason = job.issue_reason || "Issue flagged";
+
+        if (
+          job.supervisor_checked === 1 &&
+          job.paperwork_checked === 0
+        ) {
+          issueReason = "Paperwork missing";
+        }
+
+        if (
+          job.issue_flagged !== 1 &&
+          job.planned_date &&
+          job.lead_scheduler_checked === 0
+        ) {
+          issueReason = "Works not completed";
+        }
 
         let escalation_status = "green";
 
@@ -1061,22 +1073,10 @@ app.get(
           issue_age_days: ageDays,
           escalation_status,
           issue_escalated: escalation_status === "red" ? 1 : 0,
-
-          // Safe defaults until these DB columns are added
-          issue_severity: job.issue_severity || "low",
-          issue_type: job.issue_type || "other",
-          issue_created_at: job.issue_created_at || null,
+          issue_severity: "low",
+          issue_type: "other",
+          issue_created_at: null,
         };
-      });
-
-      mapped.sort((a, b) => {
-        const priority = { red: 1, amber: 2, green: 3 };
-
-        if (priority[a.escalation_status] !== priority[b.escalation_status]) {
-          return priority[a.escalation_status] - priority[b.escalation_status];
-        }
-
-        return b.issue_age_days - a.issue_age_days;
       });
 
       res.json(mapped);
