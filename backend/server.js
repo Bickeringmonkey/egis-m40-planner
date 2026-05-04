@@ -1747,7 +1747,13 @@ app.put("/api/jobs/:id/lead-scheduler-check", auth, requireRole("admin", "lead_s
     );
   });
 });
-
+app.get("/api/debug/issues-route", auth, (req, res) => {
+  res.json({
+    ok: true,
+    message: "Updated server.js is live",
+    time: new Date().toISOString(),
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
