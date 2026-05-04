@@ -83,6 +83,12 @@ function AppShell() {
           icon: ClipboardList,
           roles: ["admin", "planner", "viewer", "supervisor", "night_manager", "lead_scheduler"],
         },
+        {
+          to: "/subcontractors",
+          label: "Subcontractors",
+          icon: Users,
+          roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
+        },
         //{
         //  to: "/import-jobs",
         //  label: "Import Jobs",
@@ -112,12 +118,7 @@ function AppShell() {
           icon: CheckCircle2,
           roles: ["admin", "lead_scheduler"],
         },
-        {
-          to: "/subcontractors",
-          label: "Subcontractors",
-          icon: Users,
-          roles: ["admin", "planner", "viewer", "night_manager", "lead_scheduler"],
-        },
+      
       ],
     },
     {
