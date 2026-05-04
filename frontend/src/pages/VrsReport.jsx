@@ -56,6 +56,21 @@ function VrsReport() {
 
   const yesNo = (value) => (Number(value) === 1 ? "Yes" : "No");
 
+  const calculateOverdueDays = (job) => {
+    if (Number(job.is_ncr) !== 1 || !job.run_over_date) return 0;
+
+    const runOver = new Date(job.run_over_date);
+    const today = new Date();
+
+    runOver.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
+    return Math.max(
+      Math.floor((today - runOver) / (1000 * 60 * 60 * 24)),
+      0
+    );
+  };
+
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
       if (categoryFilter && job.category !== categoryFilter) return false;
@@ -63,6 +78,11 @@ function VrsReport() {
       return true;
     });
   }, [jobs, categoryFilter, ncrOnly]);
+
+  const clearFilters = () => {
+    setCategoryFilter("");
+    setNcrOnly(false);
+  };
 
   return (
     <div className="vrs-report-page">
@@ -88,35 +108,74 @@ function VrsReport() {
       {message && <p className="form-message">{message}</p>}
 
       <div className="vrs-kpi-grid">
-        <div className="vrs-kpi-card vrs-kpi-red">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-red"
+          onClick={() => {
+            setCategoryFilter("CAT 1");
+            setNcrOnly(false);
+          }}
+        >
           <span>CAT 1</span>
           <strong>{summary.cat1}</strong>
-        </div>
+        </button>
 
-        <div className="vrs-kpi-card vrs-kpi-orange">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-orange"
+          onClick={() => {
+            setCategoryFilter("CAT 2.1");
+            setNcrOnly(false);
+          }}
+        >
           <span>CAT 2.1</span>
           <strong>{summary.cat21}</strong>
-        </div>
+        </button>
 
-        <div className="vrs-kpi-card vrs-kpi-yellow">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-yellow"
+          onClick={() => {
+            setCategoryFilter("CAT 2.2");
+            setNcrOnly(false);
+          }}
+        >
           <span>CAT 2.2</span>
           <strong>{summary.cat22}</strong>
-        </div>
+        </button>
 
-        <div className="vrs-kpi-card vrs-kpi-blue">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-blue"
+          onClick={() => {
+            setCategoryFilter("CAT 2.3");
+            setNcrOnly(false);
+          }}
+        >
           <span>CAT 2.3</span>
           <strong>{summary.cat23}</strong>
-        </div>
+        </button>
 
-        <div className="vrs-kpi-card vrs-kpi-green">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-green"
+          onClick={clearFilters}
+        >
           <span>Completed This Month</span>
           <strong>{summary.completedThisMonth}</strong>
-        </div>
+        </button>
 
-        <div className="vrs-kpi-card vrs-kpi-dark">
+        <button
+          type="button"
+          className="vrs-kpi-card vrs-kpi-dark"
+          onClick={() => {
+            setCategoryFilter("");
+            setNcrOnly(true);
+          }}
+        >
           <span>NCRs / Overdue</span>
           <strong>{summary.ncrs}</strong>
-        </div>
+        </button>
       </div>
 
       <div className="filter-card filter-card-compact">
@@ -144,6 +203,24 @@ function VrsReport() {
             />
             NCRs only
           </label>
+
+          <div className="vrs-quick-filter-row">
+            <button type="button" onClick={() => setCategoryFilter("CAT 1")}>
+              CAT 1
+            </button>
+            <button type="button" onClick={() => setCategoryFilter("CAT 2.1")}>
+              CAT 2.1
+            </button>
+            <button type="button" onClick={() => setCategoryFilter("CAT 2.2")}>
+              CAT 2.2
+            </button>
+            <button type="button" onClick={() => setCategoryFilter("CAT 2.3")}>
+              CAT 2.3
+            </button>
+            <button type="button" onClick={clearFilters}>
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
@@ -169,6 +246,7 @@ function VrsReport() {
                 <th>Programmed</th>
                 <th>Repair Date</th>
                 <th>Run Over</th>
+                <th>Overdue</th>
                 <th>MP</th>
                 <th>A/B</th>
                 <th>Closure</th>
@@ -189,59 +267,79 @@ function VrsReport() {
             </thead>
 
             <tbody>
-              {filteredJobs.map((job) => (
-                <tr
-                  key={job.job_id}
-                  className={Number(job.is_ncr) === 1 ? "vrs-row-ncr" : ""}
-                >
-                  <td>
-                    <span className={`vrs-cat-badge ${job.category ? "" : "vrs-cat-empty"}`}>
-                      {job.category || "—"}
-                    </span>
-                  </td>
+              {filteredJobs.map((job) => {
+                const overdueDays = calculateOverdueDays(job);
 
-                  <td>
-                    <Link to={`/jobs/${job.job_id}`} className="table-link-strong">
-                      {job.job_number}
-                    </Link>
-                  </td>
+                return (
+                  <tr
+                    key={job.job_id}
+                    className={Number(job.is_ncr) === 1 ? "vrs-row-ncr" : ""}
+                  >
+                    <td>
+                      <span
+                        className={`vrs-cat-badge ${
+                          job.category ? "" : "vrs-cat-empty"
+                        }`}
+                      >
+                        {job.category || "—"}
+                      </span>
+                    </td>
 
-                  <td>{job.work_order || "—"}</td>
-                  <td>{job.incident_number || "—"}</td>
-                  <td>{formatDate(job.date_in)}</td>
-                  <td>{formatDate(job.programmed_date || job.planned_date)}</td>
-                  <td>{formatDate(job.repair_date)}</td>
-                  <td>{formatDate(job.run_over_date)}</td>
-                  <td>{job.marker_post || job.location || "—"}</td>
-                  <td>{job.carriageway_side || "—"}</td>
-                  <td>{job.closure_ref || "—"}</td>
-                  <td>{job.estimated_duration || "—"}</td>
-                  <td>{job.number_of_ops || "—"}</td>
-                  <td>{yesNo(job.diagnosis_complete)}</td>
-                  <td>{yesNo(job.concrete_required)}</td>
-                  <td>{yesNo(job.coring_required)}</td>
-                  <td>{yesNo(job.push_test_required)}</td>
-                  <td>{yesNo(job.cat_scan_required)}</td>
-                  <td>{yesNo(job.permit_to_dig_required)}</td>
-                  <td>{job.amm12_score || "—"}</td>
-                  <td>
-                    {Number(job.is_ncr) === 1 ? (
-                      <span className="vrs-ncr-pill">NCR</span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>{job.subcontractor_name || "—"}</td>
-                  <td>
-                    {job.subcontractor_contact_name || "—"}
-                    {job.subcontractor_contact_phone &&
-                    job.subcontractor_contact_phone !== "—"
-                      ? ` · ${job.subcontractor_contact_phone}`
-                      : ""}
-                  </td>
-                  <td>{job.comments || job.notes || "—"}</td>
-                </tr>
-              ))}
+                    <td>
+                      <Link
+                        to={`/jobs/${job.job_id}`}
+                        className="table-link-strong"
+                      >
+                        {job.job_number}
+                      </Link>
+                    </td>
+
+                    <td>{job.work_order || "—"}</td>
+                    <td>{job.incident_number || "—"}</td>
+                    <td>{formatDate(job.date_in)}</td>
+                    <td>{formatDate(job.programmed_date || job.planned_date)}</td>
+                    <td>{formatDate(job.repair_date)}</td>
+                    <td>{formatDate(job.run_over_date)}</td>
+                    <td>
+                      {overdueDays > 0 ? (
+                        <span className="vrs-overdue-pill">
+                          {overdueDays}d
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>{job.marker_post || job.location || "—"}</td>
+                    <td>{job.carriageway_side || "—"}</td>
+                    <td>{job.closure_ref || "—"}</td>
+                    <td>{job.estimated_duration || "—"}</td>
+                    <td>{job.number_of_ops || "—"}</td>
+                    <td>{yesNo(job.diagnosis_complete)}</td>
+                    <td>{yesNo(job.concrete_required)}</td>
+                    <td>{yesNo(job.coring_required)}</td>
+                    <td>{yesNo(job.push_test_required)}</td>
+                    <td>{yesNo(job.cat_scan_required)}</td>
+                    <td>{yesNo(job.permit_to_dig_required)}</td>
+                    <td>{job.amm12_score || "—"}</td>
+                    <td>
+                      {Number(job.is_ncr) === 1 ? (
+                        <span className="vrs-ncr-pill">NCR</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>{job.subcontractor_name || "—"}</td>
+                    <td>
+                      {job.subcontractor_contact_name || "—"}
+                      {job.subcontractor_contact_phone &&
+                      job.subcontractor_contact_phone !== "—"
+                        ? ` · ${job.subcontractor_contact_phone}`
+                        : ""}
+                    </td>
+                    <td>{job.comments || job.notes || "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

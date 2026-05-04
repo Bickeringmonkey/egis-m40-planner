@@ -4927,3 +4927,50 @@ tbody tr:nth-child(even),
     grid-template-columns: 1fr;
   }
 }
+.vrs-kpi-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+.vrs-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(9, 33, 44, 0.14);
+}
+
+.vrs-quick-filter-row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vrs-quick-filter-row button {
+  border: 1px solid #cbd8de;
+  background: #ffffff;
+  color: #09212c;
+  font-weight: 800;
+  padding: 9px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vrs-quick-filter-row button:hover {
+  background: #eef8fb;
+  border-color: #00617e;
+}
+
+.vrs-row-ncr {
+  background: #ffeaea !important;
+  border-left: 4px solid #b42318;
+}
+
+.vrs-overdue-pill {
+  display: inline-flex;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  background: #fff1f1;
+  color: #b42318;
+  border: 1px solid #f5b5b5;
+}
