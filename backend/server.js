@@ -1552,6 +1552,144 @@ app.post(
     );
   }
 );
+app.get(
+  "/api/vrs-report",
+  auth,
+  requireRole("admin", "planner", "viewer", "night_manager", "lead_scheduler"),
+  (req, res) => {
+    const sql = `
+      SELECT
+        jobs.id AS job_id,
+        jobs.job_number,
+        jobs.work_order,
+        jobs.activity,
+        jobs.location,
+        jobs.description,
+        jobs.status,
+        jobs.planned_date,
+        jobs.lead_scheduler_checked,
+
+        closures.closure_ref,
+        closures.carriageway,
+        closures.junctions_between,
+        closures.lane_configuration,
+        closures.nems_number,
+
+        workstreams.name AS workstream,
+
+        vrs_job_details.category,
+        vrs_job_details.incident_number,
+        vrs_job_details.marker_post,
+        vrs_job_details.carriageway_side,
+        vrs_job_details.closure_type,
+        vrs_job_details.number_of_ops,
+        vrs_job_details.estimated_duration,
+        vrs_job_details.posts_required,
+        vrs_job_details.beams_required,
+        vrs_job_details.components_required,
+        vrs_job_details.diagnosis_required,
+        vrs_job_details.diagnosis_complete,
+        vrs_job_details.concrete_required,
+        vrs_job_details.coring_required,
+        vrs_job_details.push_test_required,
+        vrs_job_details.excavation_required,
+        vrs_job_details.cat_scan_required,
+        vrs_job_details.permit_to_dig_required,
+        vrs_job_details.cold_patch_required,
+        vrs_job_details.amm12_score,
+        vrs_job_details.nc_required,
+        vrs_job_details.comments,
+        vrs_job_details.notes,
+        vrs_job_details.date_in,
+        vrs_job_details.programmed_date,
+        vrs_job_details.repair_date,
+        vrs_job_details.run_over_date,
+
+        COALESCE(subcontractors.company_name, '—') AS subcontractor_name,
+        COALESCE(subcontractor_contacts.contact_name, '—') AS subcontractor_contact_name,
+        COALESCE(subcontractor_contacts.phone, '—') AS subcontractor_contact_phone
+
+      FROM vrs_job_details
+      INNER JOIN jobs ON vrs_job_details.job_id = jobs.id
+      LEFT JOIN closures ON jobs.closure_id = closures.id
+      LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
+      LEFT JOIN subcontractors ON jobs.subcontractor_id = subcontractors.id
+      LEFT JOIN subcontractor_contacts ON jobs.subcontractor_contact_id = subcontractor_contacts.id
+      ORDER BY 
+        CASE vrs_job_details.category
+          WHEN 'CAT 1' THEN 1
+          WHEN 'CAT 2.1' THEN 2
+          WHEN 'CAT 2.2' THEN 3
+          WHEN 'CAT 2.3' THEN 4
+          WHEN 'NFA' THEN 5
+          ELSE 6
+        END,
+        COALESCE(vrs_job_details.run_over_date, jobs.planned_date),
+        jobs.job_number
+    `;
+
+    db.query(sql, (err, results) => {
+      if (err) {
+        console.error("VRS report fetch error:", err);
+        return res.status(500).json({
+          error: "Failed to fetch VRS report",
+          details: err.message,
+          sqlMessage: err.sqlMessage,
+        });
+      }
+
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+      const isComplete = (job) =>
+        String(job.status || "").toLowerCase() === "complete" ||
+        String(job.status || "").toLowerCase() === "completed" ||
+        Number(job.lead_scheduler_checked) === 1;
+
+      const mapped = results.map((job) => {
+        const runOverDate = job.run_over_date ? new Date(job.run_over_date) : null;
+        if (runOverDate) runOverDate.setHours(0, 0, 0, 0);
+
+        const plannedDate = job.planned_date ? new Date(job.planned_date) : null;
+
+        const completedThisMonth =
+          isComplete(job) &&
+          plannedDate &&
+          plannedDate >= monthStart &&
+          plannedDate < nextMonthStart;
+
+        const isNcr =
+          runOverDate &&
+          runOverDate < now &&
+          !isComplete(job);
+
+        return {
+          ...job,
+          is_complete: isComplete(job) ? 1 : 0,
+          completed_this_month: completedThisMonth ? 1 : 0,
+          is_ncr: isNcr ? 1 : 0,
+        };
+      });
+
+      const summary = {
+        cat1: mapped.filter((j) => j.category === "CAT 1").length,
+        cat21: mapped.filter((j) => j.category === "CAT 2.1").length,
+        cat22: mapped.filter((j) => j.category === "CAT 2.2").length,
+        cat23: mapped.filter((j) => j.category === "CAT 2.3").length,
+        completedThisMonth: mapped.filter((j) => j.completed_this_month).length,
+        ncrs: mapped.filter((j) => j.is_ncr).length,
+      };
+
+      res.json({
+        summary,
+        jobs: mapped,
+      });
+    });
+  }
+);
 // -----------------------------
 // Subcontractors
 // -----------------------------
