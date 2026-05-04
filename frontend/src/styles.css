@@ -4134,3 +4134,118 @@ tbody tr:nth-child(even),
     break-inside: avoid !important;
   }
 }
+.issues-print-list {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  .print-hide,
+  .dashboard-kpi-grid,
+  .issues-insight-card,
+  .filter-card,
+  .table-wrapper {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11px !important;
+  }
+
+  .issues-page {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .issues-print-header {
+    display: block !important;
+    border-bottom: 3px solid #00617e !important;
+    margin-bottom: 10px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .issues-print-header h1 {
+    font-size: 18px !important;
+    margin: 0 !important;
+    color: #00617e !important;
+  }
+
+  .issues-print-header p {
+    margin: 3px 0 0 0 !important;
+    font-size: 10px !important;
+  }
+
+  .issues-group {
+    margin-bottom: 12px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .issues-group-header {
+    background: #eef3f6 !important;
+    border-left: 5px solid #00617e !important;
+    padding: 7px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .issues-group-header h2 {
+    font-size: 14px !important;
+    margin: 0 0 3px 0 !important;
+  }
+
+  .issues-group-header p {
+    font-size: 9px !important;
+    margin: 1px 0 !important;
+  }
+
+  .issue-count-pill {
+    display: none !important;
+  }
+
+  .issues-print-list {
+    display: block !important;
+  }
+
+  .issue-print-card {
+    border: 1px solid #b8c7d0 !important;
+    border-left: 4px solid #d32f2f !important;
+    padding: 7px !important;
+    margin-bottom: 7px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .issue-print-top {
+    display: grid !important;
+    grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+    gap: 6px;
+    border-bottom: 1px solid #d6e0e5 !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 5px !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
+  }
+
+  .issue-print-body {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 10px;
+  }
+
+  .issue-print-body p {
+    margin: 0 !important;
+    font-size: 9px !important;
+    line-height: 1.25 !important;
+  }
+
+  .issue-print-notes {
+    grid-column: 1 / -1;
+  }
+}

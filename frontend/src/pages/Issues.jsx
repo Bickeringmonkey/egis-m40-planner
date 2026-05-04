@@ -35,7 +35,6 @@ function Issues() {
       setMessage("");
 
       const params = new URLSearchParams();
-
       if (selectedDate) params.append("date", selectedDate);
       if (selectedClosureId) params.append("closureId", selectedClosureId);
 
@@ -62,7 +61,6 @@ function Issues() {
     try {
       setMessage("");
       await api.put(`/jobs/${jobId}/resolve-issue`);
-
       setIssues((prev) => prev.filter((issue) => issue.id !== jobId));
       setMessage("Issue resolved.");
     } catch (err) {
@@ -117,18 +115,9 @@ function Issues() {
     if (job.escalation_status) return job.escalation_status;
 
     const days = getIssueAgeDays(job);
-
     if (days >= 4) return "red";
     if (days >= 2) return "amber";
     return "green";
-  };
-
-  const getAgeClass = (job) => {
-    const status = getEscalationStatus(job);
-
-    if (status === "red") return "issue-age issue-age-red";
-    if (status === "amber") return "issue-age issue-age-amber";
-    return "issue-age issue-age-green";
   };
 
   const getAgeLabel = (days) => {
@@ -137,9 +126,15 @@ function Issues() {
     return `${days} days open`;
   };
 
+  const getAgeClass = (job) => {
+    const status = getEscalationStatus(job);
+    if (status === "red") return "issue-age issue-age-red";
+    if (status === "amber") return "issue-age issue-age-amber";
+    return "issue-age issue-age-green";
+  };
+
   const getEscalationLabel = (job) => {
     const status = getEscalationStatus(job);
-
     if (status === "red") return "Critical";
     if (status === "amber") return "Warning";
     return "Open";
@@ -147,7 +142,6 @@ function Issues() {
 
   const getEscalationClass = (job) => {
     const status = getEscalationStatus(job);
-
     if (status === "red") return "issue-escalation issue-escalation-red";
     if (status === "amber") return "issue-escalation issue-escalation-amber";
     return "issue-escalation issue-escalation-green";
@@ -155,7 +149,6 @@ function Issues() {
 
   const getSeverityClass = (severity) => {
     const clean = String(severity || "low").toLowerCase();
-
     if (clean === "high") return "issue-severity issue-severity-high";
     if (clean === "medium") return "issue-severity issue-severity-medium";
     return "issue-severity issue-severity-low";
@@ -163,7 +156,6 @@ function Issues() {
 
   const getSeverityLabel = (severity) => {
     const clean = String(severity || "low").toLowerCase();
-
     if (clean === "high") return "High";
     if (clean === "medium") return "Medium";
     return "Low";
@@ -248,7 +240,6 @@ function Issues() {
 
     let red = 0;
     let amber = 0;
-    let green = 0;
     let highSeverity = 0;
 
     issues.forEach((issue) => {
@@ -261,9 +252,7 @@ function Issues() {
       byClosure[closure] = (byClosure[closure] || 0) + 1;
 
       if (status === "red") red += 1;
-      else if (status === "amber") amber += 1;
-      else green += 1;
-
+      if (status === "amber") amber += 1;
       if (severity === "high") highSeverity += 1;
     });
 
@@ -276,9 +265,7 @@ function Issues() {
     return {
       red,
       amber,
-      green,
       highSeverity,
-      escalated: red,
       topWorkstream,
       topClosure,
     };
@@ -497,6 +484,53 @@ function Issues() {
               <div className="closure-group-count issue-count-pill">
                 {group.jobs.length} issue{group.jobs.length !== 1 ? "s" : ""}
               </div>
+            </div>
+
+            <div className="issues-print-list">
+              {group.jobs.map((job) => {
+                const ageDays = getIssueAgeDays(job);
+                const reason =
+                  job.issue_reason_label || job.issue_reason || "Issue flagged";
+
+                return (
+                  <div key={`print-${job.id}`} className="issue-print-card">
+                    <div className="issue-print-top">
+                      <strong>{job.job_number}</strong>
+                      <span>{formatDate(job.planned_date)}</span>
+                      <span>{getAgeLabel(ageDays)}</span>
+                      <span>{getEscalationLabel(job)}</span>
+                      <span>{getSeverityLabel(job.issue_severity)}</span>
+                    </div>
+
+                    <div className="issue-print-body">
+                      <p>
+                        <strong>Workstream:</strong> {job.workstream || "N/A"}
+                      </p>
+                      <p>
+                        <strong>Type:</strong> {getTypeLabel(job.issue_type)}
+                      </p>
+                      <p>
+                        <strong>Reason:</strong> {reason}
+                      </p>
+                      <p>
+                        <strong>Location:</strong> {job.location || "N/A"}
+                      </p>
+                      <p>
+                        <strong>MP:</strong> {job.start_mp || ""}{" "}
+                        {job.end_mp ? `- ${job.end_mp}` : ""}
+                      </p>
+                      <p>
+                        <strong>Description:</strong>{" "}
+                        {job.description || job.activity || job.title || ""}
+                      </p>
+                      <p className="issue-print-notes">
+                        <strong>Notes:</strong>{" "}
+                        {job.completion_notes || "No notes added."}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="table-wrapper">
