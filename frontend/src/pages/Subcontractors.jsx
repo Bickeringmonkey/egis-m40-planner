@@ -28,7 +28,6 @@ function Subcontractors() {
     try {
       setLoading(true);
       setMessage("");
-
       const res = await api.get("/subcontractors");
       setSubcontractors(res.data || []);
     } catch (err) {
@@ -55,19 +54,6 @@ function Subcontractors() {
     }
   };
 
-  const resetCompanyForm = () => {
-    setCompanyName("");
-    setCompanyNotes("");
-  };
-
-  const resetContactForm = () => {
-    setContactName("");
-    setContactPhone("");
-    setContactEmail("");
-    setContactRole("");
-    setContactPrimary(false);
-  };
-
   const createSubcontractor = async (e) => {
     e.preventDefault();
 
@@ -77,14 +63,13 @@ function Subcontractors() {
     }
 
     try {
-      setMessage("");
-
       await api.post("/subcontractors", {
         company_name: companyName,
         notes: companyNotes,
       });
 
-      resetCompanyForm();
+      setCompanyName("");
+      setCompanyNotes("");
       await loadSubcontractors();
       setMessage("Subcontractor added.");
     } catch (err) {
@@ -107,8 +92,6 @@ function Subcontractors() {
     }
 
     try {
-      setMessage("");
-
       await api.post(`/subcontractors/${selectedSubcontractor.id}/contacts`, {
         contact_name: contactName,
         phone: contactPhone,
@@ -117,7 +100,12 @@ function Subcontractors() {
         is_primary: contactPrimary,
       });
 
-      resetContactForm();
+      setContactName("");
+      setContactPhone("");
+      setContactEmail("");
+      setContactRole("");
+      setContactPrimary(false);
+
       await loadContacts(selectedSubcontractor);
       setMessage("Contact added.");
     } catch (err) {
@@ -131,191 +119,197 @@ function Subcontractors() {
   );
 
   return (
-    <div className="subcontractors-page">
-      <div className="list-page-header">
+    <div className="subs-page">
+      <div className="subs-hero">
         <div>
-          <h1 className="page-title">Subcontractors</h1>
-          <p className="page-subtitle">
-            Manage subcontractor companies and contacts for M40 closures.
-          </p>
+          <h1>Subcontractors</h1>
+          <p>Manage subcontractor companies and key contacts for M40 closures.</p>
         </div>
 
-        <div className="detail-actions">
-          <Link to="/dashboard" className="detail-btn detail-btn-secondary">
-            Back to Dashboard
-          </Link>
-        </div>
+        <Link to="/dashboard" className="subs-back-btn">
+          Back to Dashboard
+        </Link>
       </div>
 
-      {message && <p className="form-message">{message}</p>}
+      {message && <div className="subs-message">{message}</div>}
 
-      <div className="subcontractor-layout">
-        <div className="detail-card">
-          <h2>Add Subcontractor</h2>
+      <div className="subs-top-grid">
+        <section className="subs-panel">
+          <div className="subs-panel-header">
+            <h2>Add Company</h2>
+            <p>Create subcontractor companies once, then reuse them on jobs.</p>
+          </div>
 
-          <form onSubmit={createSubcontractor}>
-            <div className="form-group">
-              <label>Subcontractor Name</label>
+          <form onSubmit={createSubcontractor} className="subs-form">
+            <label>
+              Company name
               <input
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Example: ABC Drainage Ltd"
+                placeholder="Example: FM Conways"
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Notes</label>
+            <label>
+              Notes
               <textarea
                 value={companyNotes}
                 onChange={(e) => setCompanyNotes(e.target.value)}
-                placeholder="Optional notes about this subcontractor"
-                rows="3"
+                placeholder="Example: Drainage, surfacing, VRS, specialist works..."
+                rows="4"
               />
-            </div>
+            </label>
 
-            <button type="submit" className="detail-btn">
-              Add Subcontractor
-            </button>
+            <button type="submit">Add Company</button>
           </form>
-        </div>
+        </section>
 
-        <div className="detail-card">
-          <h2>Subcontractor List</h2>
+        <section className="subs-panel">
+          <div className="subs-panel-header">
+            <h2>Companies</h2>
+            <p>Select a company to manage contacts.</p>
+          </div>
 
-          {loading && <p>Loading subcontractors...</p>}
+          {loading && <p className="subs-muted">Loading subcontractors...</p>}
 
           {!loading && activeSubcontractors.length === 0 && (
-            <p>No subcontractors added yet.</p>
+            <div className="subs-empty">No subcontractors added yet.</div>
           )}
 
-          <div className="subcontractor-list">
+          <div className="subs-company-list">
             {activeSubcontractors.map((sub) => (
               <button
-                type="button"
                 key={sub.id}
+                type="button"
+                onClick={() => loadContacts(sub)}
                 className={
                   selectedSubcontractor?.id === sub.id
-                    ? "subcontractor-list-item subcontractor-list-item-active"
-                    : "subcontractor-list-item"
+                    ? "subs-company-card active"
+                    : "subs-company-card"
                 }
-                onClick={() => loadContacts(sub)}
               >
-                <strong>{sub.company_name}</strong>
-                {sub.notes && <span>{sub.notes}</span>}
+                <div>
+                  <strong>{sub.company_name}</strong>
+                  <span>{sub.notes || "No notes added"}</span>
+                </div>
+                <em>View contacts</em>
               </button>
             ))}
           </div>
-        </div>
+        </section>
+      </div>
 
-        <div className="detail-card subcontractor-contacts-card">
-          <h2>
-            Contacts{" "}
-            {selectedSubcontractor
-              ? `- ${selectedSubcontractor.company_name}`
-              : ""}
-          </h2>
-
-          {!selectedSubcontractor && (
-            <p>Select a subcontractor to view or add contacts.</p>
-          )}
+      <section className="subs-panel subs-contacts-panel">
+        <div className="subs-panel-header subs-contacts-header">
+          <div>
+            <h2>Contacts</h2>
+            <p>
+              {selectedSubcontractor
+                ? `Contacts for ${selectedSubcontractor.company_name}`
+                : "Select a company to add or view contacts."}
+            </p>
+          </div>
 
           {selectedSubcontractor && (
-            <>
-              <form onSubmit={addContact} className="contact-form-grid">
-                <div className="form-group">
-                  <label>Contact Name</label>
-                  <input
-                    type="text"
-                    value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
-                    placeholder="Example: John Smith"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Telephone</label>
-                  <input
-                    type="text"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
-                    placeholder="07..."
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
-                    placeholder="name@company.co.uk"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Role</label>
-                  <input
-                    type="text"
-                    value={contactRole}
-                    onChange={(e) => setContactRole(e.target.value)}
-                    placeholder="Supervisor / Planner / Manager"
-                  />
-                </div>
-
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={contactPrimary}
-                    onChange={(e) => setContactPrimary(e.target.checked)}
-                  />
-                  Primary contact
-                </label>
-
-                <button type="submit" className="detail-btn">
-                  Add Contact
-                </button>
-              </form>
-
-              <hr />
-
-              {contactsLoading && <p>Loading contacts...</p>}
-
-              {!contactsLoading && contacts.length === 0 && (
-                <p>No contacts added for this subcontractor yet.</p>
-              )}
-
-              {!contactsLoading && contacts.length > 0 && (
-                <div className="table-wrapper">
-                  <table className="enhanced-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Role</th>
-                        <th>Telephone</th>
-                        <th>Email</th>
-                        <th>Primary</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {contacts.map((contact) => (
-                        <tr key={contact.id}>
-                          <td>{contact.contact_name}</td>
-                          <td>{contact.role || "N/A"}</td>
-                          <td>{contact.phone || "N/A"}</td>
-                          <td>{contact.email || "N/A"}</td>
-                          <td>{contact.is_primary ? "Yes" : "No"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
+            <div className="subs-selected-pill">
+              {selectedSubcontractor.company_name}
+            </div>
           )}
         </div>
-      </div>
+
+        {!selectedSubcontractor && (
+          <div className="subs-empty">
+            Pick a subcontractor from the company list above.
+          </div>
+        )}
+
+        {selectedSubcontractor && (
+          <>
+            <form onSubmit={addContact} className="subs-contact-form">
+              <label>
+                Contact name
+                <input
+                  type="text"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="Example: John Smith"
+                />
+              </label>
+
+              <label>
+                Telephone
+                <input
+                  type="text"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="07..."
+                />
+              </label>
+
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="name@company.co.uk"
+                />
+              </label>
+
+              <label>
+                Role
+                <input
+                  type="text"
+                  value={contactRole}
+                  onChange={(e) => setContactRole(e.target.value)}
+                  placeholder="Supervisor / Manager"
+                />
+              </label>
+
+              <label className="subs-checkbox">
+                <input
+                  type="checkbox"
+                  checked={contactPrimary}
+                  onChange={(e) => setContactPrimary(e.target.checked)}
+                />
+                Primary contact
+              </label>
+
+              <button type="submit">Add Contact</button>
+            </form>
+
+            <div className="subs-contact-list">
+              {contactsLoading && <p className="subs-muted">Loading contacts...</p>}
+
+              {!contactsLoading && contacts.length === 0 && (
+                <div className="subs-empty">No contacts added yet.</div>
+              )}
+
+              {!contactsLoading &&
+                contacts.map((contact) => (
+                  <div key={contact.id} className="subs-contact-card">
+                    <div>
+                      <strong>{contact.contact_name}</strong>
+                      <span>{contact.role || "No role added"}</span>
+                    </div>
+
+                    <div>
+                      <span>{contact.phone || "No phone"}</span>
+                      <span>{contact.email || "No email"}</span>
+                    </div>
+
+                    {contact.is_primary ? (
+                      <em className="subs-primary-badge">Primary</em>
+                    ) : (
+                      <em className="subs-secondary-badge">Contact</em>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
