@@ -98,23 +98,36 @@ function Issues() {
       return Number(job.issue_age_days || 0);
     }
 
-    if (!job.planned_date) return 0;
+    const baseDate = job.issue_created_at || job.planned_date;
+    if (!baseDate) return 0;
 
-    const planned = new Date(job.planned_date);
+    const issueDate = new Date(baseDate);
     const now = new Date();
 
-    planned.setHours(0, 0, 0, 0);
+    issueDate.setHours(0, 0, 0, 0);
     now.setHours(0, 0, 0, 0);
 
     return Math.max(
-      Math.floor((now - planned) / (1000 * 60 * 60 * 24)),
+      Math.floor((now - issueDate) / (1000 * 60 * 60 * 24)),
       0
     );
   };
 
-  const getAgeClass = (days) => {
-    if (days >= 4) return "issue-age issue-age-red";
-    if (days >= 2) return "issue-age issue-age-amber";
+  const getEscalationStatus = (job) => {
+    if (job.escalation_status) return job.escalation_status;
+
+    const days = getIssueAgeDays(job);
+
+    if (days >= 4) return "red";
+    if (days >= 2) return "amber";
+    return "green";
+  };
+
+  const getAgeClass = (job) => {
+    const status = getEscalationStatus(job);
+
+    if (status === "red") return "issue-age issue-age-red";
+    if (status === "amber") return "issue-age issue-age-amber";
     return "issue-age issue-age-green";
   };
 
@@ -122,6 +135,52 @@ function Issues() {
     if (days === 0) return "Today";
     if (days === 1) return "1 day open";
     return `${days} days open`;
+  };
+
+  const getEscalationLabel = (job) => {
+    const status = getEscalationStatus(job);
+
+    if (status === "red") return "Critical";
+    if (status === "amber") return "Warning";
+    return "Open";
+  };
+
+  const getEscalationClass = (job) => {
+    const status = getEscalationStatus(job);
+
+    if (status === "red") return "issue-escalation issue-escalation-red";
+    if (status === "amber") return "issue-escalation issue-escalation-amber";
+    return "issue-escalation issue-escalation-green";
+  };
+
+  const getSeverityClass = (severity) => {
+    const clean = String(severity || "low").toLowerCase();
+
+    if (clean === "high") return "issue-severity issue-severity-high";
+    if (clean === "medium") return "issue-severity issue-severity-medium";
+    return "issue-severity issue-severity-low";
+  };
+
+  const getSeverityLabel = (severity) => {
+    const clean = String(severity || "low").toLowerCase();
+
+    if (clean === "high") return "High";
+    if (clean === "medium") return "Medium";
+    return "Low";
+  };
+
+  const getTypeLabel = (type) => {
+    const clean = String(type || "other").toLowerCase();
+
+    const labels = {
+      access: "Access",
+      incomplete: "Incomplete",
+      safety: "Safety",
+      paperwork: "Paperwork",
+      other: "Other",
+    };
+
+    return labels[clean] || clean.charAt(0).toUpperCase() + clean.slice(1);
   };
 
   const getReasonClass = (reason) => {
@@ -138,6 +197,15 @@ function Issues() {
     const groups = {};
 
     const sortedIssues = [...issues].sort((a, b) => {
+      const priority = { red: 1, amber: 2, green: 3 };
+
+      const statusA = getEscalationStatus(a);
+      const statusB = getEscalationStatus(b);
+
+      if (priority[statusA] !== priority[statusB]) {
+        return priority[statusA] - priority[statusB];
+      }
+
       const ageA = getIssueAgeDays(a);
       const ageB = getIssueAgeDays(b);
 
@@ -177,19 +245,26 @@ function Issues() {
   const issueStats = useMemo(() => {
     const byWorkstream = {};
     const byClosure = {};
-    let escalated = 0;
+
+    let red = 0;
+    let amber = 0;
+    let green = 0;
+    let highSeverity = 0;
 
     issues.forEach((issue) => {
       const workstream = issue.workstream || "Unknown";
       const closure = issue.closure_ref || "No closure";
-      const ageDays = getIssueAgeDays(issue);
+      const status = getEscalationStatus(issue);
+      const severity = String(issue.issue_severity || "low").toLowerCase();
 
       byWorkstream[workstream] = (byWorkstream[workstream] || 0) + 1;
       byClosure[closure] = (byClosure[closure] || 0) + 1;
 
-      if (issue.issue_escalated || ageDays >= 4) {
-        escalated += 1;
-      }
+      if (status === "red") red += 1;
+      else if (status === "amber") amber += 1;
+      else green += 1;
+
+      if (severity === "high") highSeverity += 1;
     });
 
     const topWorkstream =
@@ -199,7 +274,11 @@ function Issues() {
       Object.entries(byClosure).sort((a, b) => b[1] - a[1])[0] || null;
 
     return {
-      escalated,
+      red,
+      amber,
+      green,
+      highSeverity,
+      escalated: red,
       topWorkstream,
       topClosure,
     };
@@ -226,7 +305,7 @@ function Issues() {
         <div>
           <h1 className="page-title">Issues</h1>
           <p className="page-subtitle">
-            Open operational issues, ageing, reason codes and escalation.
+            Open operational issues, severity, ageing and escalation.
           </p>
         </div>
 
@@ -257,31 +336,31 @@ function Issues() {
         </div>
 
         <div className="dashboard-kpi-card">
-          <div className="dashboard-kpi-icon icon-blue">🚧</div>
+          <div className="dashboard-kpi-icon icon-red">🔥</div>
           <div className="dashboard-kpi-body">
-            <div className="dashboard-kpi-label">Affected Closures</div>
-            <div className="dashboard-kpi-value">{groupedIssues.length}</div>
-            <div className="dashboard-kpi-meta">Grouped by closure</div>
+            <div className="dashboard-kpi-label">Critical</div>
+            <div className="dashboard-kpi-value">{issueStats.red}</div>
+            <div className="dashboard-kpi-meta">Open 4+ days</div>
           </div>
         </div>
 
         <div className="dashboard-kpi-card">
           <div className="dashboard-kpi-icon icon-yellow">⏱</div>
           <div className="dashboard-kpi-body">
-            <div className="dashboard-kpi-label">Oldest Issue</div>
-            <div className="dashboard-kpi-value">{oldestIssueDays}</div>
-            <div className="dashboard-kpi-meta">
-              {oldestIssueDays === 1 ? "day open" : "days open"}
-            </div>
+            <div className="dashboard-kpi-label">Warnings</div>
+            <div className="dashboard-kpi-value">{issueStats.amber}</div>
+            <div className="dashboard-kpi-meta">Open 2+ days</div>
           </div>
         </div>
 
         <div className="dashboard-kpi-card">
-          <div className="dashboard-kpi-icon icon-red">🔥</div>
+          <div className="dashboard-kpi-icon icon-blue">🚧</div>
           <div className="dashboard-kpi-body">
-            <div className="dashboard-kpi-label">Escalated</div>
-            <div className="dashboard-kpi-value">{issueStats.escalated}</div>
-            <div className="dashboard-kpi-meta">Open 4+ days</div>
+            <div className="dashboard-kpi-label">Affected Closures</div>
+            <div className="dashboard-kpi-value">{groupedIssues.length}</div>
+            <div className="dashboard-kpi-meta">
+              Oldest: {oldestIssueDays} day{oldestIssueDays !== 1 ? "s" : ""}
+            </div>
           </div>
         </div>
       </div>
@@ -309,10 +388,17 @@ function Issues() {
           <div>
             <span>Action focus</span>
             <strong>
-              {issueStats.escalated > 0
-                ? "Escalated issues need chasing"
+              {issueStats.red > 0
+                ? "Critical issues need chasing"
+                : issueStats.amber > 0
+                ? "Warnings need watching"
                 : "No escalated issues"}
             </strong>
+          </div>
+
+          <div>
+            <span>High severity</span>
+            <strong>{issueStats.highSeverity}</strong>
           </div>
         </div>
       )}
@@ -419,6 +505,9 @@ function Issues() {
                   <tr>
                     <th>Date</th>
                     <th>Age</th>
+                    <th>Escalation</th>
+                    <th>Severity</th>
+                    <th>Type</th>
                     <th>Reason</th>
                     <th>Job No</th>
                     <th>Workstream</th>
@@ -433,6 +522,8 @@ function Issues() {
                 <tbody>
                   {group.jobs.map((job) => {
                     const ageDays = getIssueAgeDays(job);
+                    const escalationStatus = getEscalationStatus(job);
+
                     const reason =
                       job.issue_reason_label ||
                       job.issue_reason ||
@@ -442,7 +533,7 @@ function Issues() {
                       <tr
                         key={job.id}
                         className={
-                          ageDays >= 4
+                          escalationStatus === "red"
                             ? "issue-table-row issue-table-row-escalated"
                             : "issue-table-row"
                         }
@@ -450,17 +541,31 @@ function Issues() {
                         <td>{formatDate(job.planned_date)}</td>
 
                         <td>
-                          <span className={getAgeClass(ageDays)}>
+                          <span className={getAgeClass(job)}>
                             {getAgeLabel(ageDays)}
                           </span>
                         </td>
+
+                        <td>
+                          <span className={getEscalationClass(job)}>
+                            {getEscalationLabel(job)}
+                          </span>
+                        </td>
+
+                        <td>
+                          <span className={getSeverityClass(job.issue_severity)}>
+                            {getSeverityLabel(job.issue_severity)}
+                          </span>
+                        </td>
+
+                        <td>{getTypeLabel(job.issue_type)}</td>
 
                         <td>
                           <span className={getReasonClass(reason)}>
                             {reason}
                           </span>
 
-                          {ageDays >= 4 && (
+                          {escalationStatus === "red" && (
                             <div className="issue-escalated-label">
                               Escalated
                             </div>
@@ -481,11 +586,14 @@ function Issues() {
 
                         <td>{job.workstream || "N/A"}</td>
                         <td>{job.location || "N/A"}</td>
+
                         <td>
                           {job.start_mp || ""}{" "}
                           {job.end_mp ? `- ${job.end_mp}` : ""}
                         </td>
+
                         <td>{job.description || job.activity || job.title || ""}</td>
+
                         <td className="issues-notes">
                           {job.completion_notes || "No notes added."}
                         </td>

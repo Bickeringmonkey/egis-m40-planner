@@ -3866,3 +3866,35 @@ tbody tr:nth-child(even),
     text-decoration: none !important;
   }
 }
+.issue-escalation,
+.issue-severity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.issue-escalation-red,
+.issue-severity-high {
+  background: #ffe5e5;
+  color: #b42318;
+  border: 1px solid #f5b5b5;
+}
+
+.issue-escalation-amber,
+.issue-severity-medium {
+  background: #fff4d6;
+  color: #9a5b00;
+  border: 1px solid #f5d27a;
+}
+
+.issue-escalation-green,
+.issue-severity-low {
+  background: #e7f7ed;
+  color: #067647;
+  border: 1px solid #a8dfbc;
+}

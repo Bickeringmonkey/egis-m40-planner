@@ -999,25 +999,31 @@ app.get(
         jobs.status,
         jobs.planned_date,
         jobs.completion_notes,
+
         jobs.issue_flagged,
         jobs.issue_reason,
+        jobs.issue_severity,
+        jobs.issue_type,
+        jobs.issue_created_at,
         jobs.issue_resolved_at,
         jobs.issue_resolved_by,
+
         jobs.supervisor_checked,
         jobs.paperwork_checked,
         jobs.lead_scheduler_checked,
         jobs.closure_id,
+
         workstreams.name AS workstream,
         closures.closure_ref,
         closures.carriageway,
         closures.junctions_between,
         closures.lane_configuration,
         closures.nems_number
+
       FROM jobs
       LEFT JOIN closures ON jobs.closure_id = closures.id
       LEFT JOIN workstreams ON jobs.workstream_id = workstreams.id
       WHERE ${filters.join(" AND ")}
-      ORDER BY jobs.planned_date, closures.closure_ref, jobs.start_mp, jobs.job_number
     `;
 
     db.query(sql, params, (err, results) => {
@@ -1026,24 +1032,51 @@ app.get(
         return res.status(500).json({ error: "Failed to fetch issues" });
       }
 
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
       const mapped = results.map((job) => {
         const issueReason = getIssueReason(job);
-        const planned = job.planned_date ? new Date(job.planned_date) : null;
-        const now = new Date();
 
-        if (planned) planned.setHours(0, 0, 0, 0);
-        now.setHours(0, 0, 0, 0);
+        // 🔥 Use issue_created_at if available, fallback to planned_date
+        const baseDate = job.issue_created_at
+          ? new Date(job.issue_created_at)
+          : job.planned_date
+          ? new Date(job.planned_date)
+          : null;
 
-        const ageDays = planned
-          ? Math.max(Math.floor((now - planned) / (1000 * 60 * 60 * 24)), 0)
+        if (baseDate) baseDate.setHours(0, 0, 0, 0);
+
+        const ageDays = baseDate
+          ? Math.max(Math.floor((now - baseDate) / (1000 * 60 * 60 * 24)), 0)
           : 0;
+
+        // 🚨 Escalation logic
+        let escalation_status = "green";
+        if (ageDays >= 4) {
+          escalation_status = "red";
+        } else if (ageDays >= 2) {
+          escalation_status = "amber";
+        }
 
         return {
           ...job,
           issue_reason_label: issueReason,
           issue_age_days: ageDays,
-          issue_escalated: ageDays >= 4 ? 1 : 0,
+          escalation_status,
+          issue_escalated: escalation_status === "red" ? 1 : 0,
         };
+      });
+
+      // 🔥 Sort properly: worst issues first
+      mapped.sort((a, b) => {
+        const priority = { red: 1, amber: 2, green: 3 };
+
+        if (priority[a.escalation_status] !== priority[b.escalation_status]) {
+          return priority[a.escalation_status] - priority[b.escalation_status];
+        }
+
+        return b.issue_age_days - a.issue_age_days;
       });
 
       res.json(mapped);
@@ -1535,11 +1568,14 @@ app.get(
 
 app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor"), (req, res) => {
   const jobId = req.params.id;
+
   const {
     supervisor_checked,
     paperwork_checked,
     issue_flagged,
     issue_reason,
+    issue_severity,
+    issue_type,
     completion_notes,
   } = req.body;
 
@@ -1549,16 +1585,35 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
     });
   }
 
+  const issueFlag = issue_flagged ? 1 : 0;
+
   const sql = `
     UPDATE jobs
-    SET supervisor_checked = ?,
+    SET 
+        supervisor_checked = ?,
         supervisor_checked_by = ?,
         supervisor_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+
         paperwork_checked = ?,
         paperwork_checked_by = ?,
         paperwork_checked_at = CASE WHEN ? = 1 THEN NOW() ELSE NULL END,
+
         issue_flagged = ?,
         issue_reason = ?,
+        issue_severity = CASE 
+          WHEN ? = 1 THEN ?
+          ELSE NULL
+        END,
+        issue_type = CASE 
+          WHEN ? = 1 THEN ?
+          ELSE NULL
+        END,
+        issue_created_at = CASE
+          WHEN ? = 1 AND issue_created_at IS NULL THEN NOW()
+          WHEN ? = 0 THEN NULL
+          ELSE issue_created_at
+        END,
+
         completion_notes = ?
     WHERE id = ?
   `;
@@ -1569,11 +1624,23 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
       supervisor_checked ? 1 : 0,
       supervisor_checked ? req.user.id : null,
       supervisor_checked ? 1 : 0,
+
       paperwork_checked ? 1 : 0,
       paperwork_checked ? req.user.id : null,
       paperwork_checked ? 1 : 0,
-      issue_flagged ? 1 : 0,
-      issue_flagged ? issue_reason || "Supervisor flagged issue" : null,
+
+      issueFlag,
+      issueFlag ? issue_reason || "Supervisor flagged issue" : null,
+
+      issueFlag,
+      issue_severity || "low",
+
+      issueFlag,
+      issue_type || "other",
+
+      issueFlag,
+      issueFlag,
+
       completion_notes || null,
       jobId,
     ],
