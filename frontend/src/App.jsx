@@ -35,6 +35,7 @@ import ExcelImport from "./pages/ExcelImport";
 import ImportJobs from "./pages/ImportJobs";
 import Issues from "./pages/Issues";
 import Subcontractors from "./pages/Subcontractors";
+import VrsReport from "./pages/VrsReport";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -266,7 +267,14 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
-
+          <Route
+            path="/jobs/vrs-report"
+            element={
+              <ProtectedRoute roles={["admin", "planner", "viewer", "night_manager", "lead_scheduler"]}>
+                <VrsReport />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/jobs"
             element={
