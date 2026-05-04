@@ -267,14 +267,7 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/jobs/vrs-report"
-            element={
-              <ProtectedRoute roles={["admin", "planner", "viewer", "night_manager", "lead_scheduler"]}>
-                <VrsReport />
-              </ProtectedRoute>
-            }
-          />
+  
           <Route
             path="/jobs"
             element={
@@ -283,6 +276,14 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
+          <Route
+              path="/jobs/vrs-report"
+              element={
+                <ProtectedRoute roles={["admin", "planner", "viewer", "night_manager", "lead_scheduler"]}>
+                  <VrsReport />
+                </ProtectedRoute>
+              }
+            />
 
           <Route
             path="/jobs/:id"
