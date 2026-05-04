@@ -569,49 +569,60 @@ function AddJob() {
                   />
                 </div>
 
-                <div className="full-width">
-                  <h4>Diagnosis</h4>
-                  <div className="vrs-checkbox-grid">
-                    {[
-                      ["diagnosis_required", "Diagnosis Required"],
-                      ["diagnosis_complete", "Diagnosis Complete"],
-                    ].map(([name, label]) => (
-                      <label key={name} className="vrs-checkbox">
-                        <input
-                          type="checkbox"
-                          name={name}
-                          checked={vrsForm[name]}
-                          onChange={handleVrsChange}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
+                <div className="vrs-checklist-panel full-width">
+  <div className="vrs-checklist-header">
+    <h3>VRS Requirements Checklist</h3>
+    <p>Tick what is required from the diagnosis sheet.</p>
+  </div>
 
-                  <h4 style={{ marginTop: "16px" }}>Works Required</h4>
-                  <div className="vrs-checkbox-grid">
-                    {[
-                      ["concrete_required", "Concrete"],
-                      ["coring_required", "Coring"],
-                      ["push_test_required", "Push Test"],
-                      ["excavation_required", "Excavation"],
-                      ["cat_scan_required", "CAT Scan"],
-                      ["permit_to_dig_required", "Permit to Dig"],
-                      ["cold_patch_required", "Cold Patch"],
-                      ["nc_required", "NC Required"],
-                    ].map(([name, label]) => (
-                      <label key={name} className="vrs-checkbox">
-                        <input
-                          type="checkbox"
-                          name={name}
-                          checked={vrsForm[name]}
-                          onChange={handleVrsChange}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+  <div className="vrs-checklist-section">
+    <h4>Diagnosis Status</h4>
+
+    <div className="vrs-checklist-grid">
+      {[
+        ["diagnosis_required", "Diagnosis Required"],
+        ["diagnosis_complete", "Diagnosis Complete"],
+      ].map(([name, label]) => (
+        <label key={name} className="vrs-check-card">
+          <input
+            type="checkbox"
+            name={name}
+            checked={vrsForm[name]}
+            onChange={handleVrsChange}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+    </div>
+  </div>
+
+  <div className="vrs-checklist-section">
+    <h4>Repair Requirements</h4>
+
+    <div className="vrs-checklist-grid">
+      {[
+        ["concrete_required", "Concrete"],
+        ["coring_required", "Coring"],
+        ["push_test_required", "Push Test"],
+        ["excavation_required", "Excavation"],
+        ["cat_scan_required", "CAT Scan"],
+        ["permit_to_dig_required", "Permit to Dig"],
+        ["cold_patch_required", "Cold Patch"],
+        ["nc_required", "NC Required"],
+      ].map(([name, label]) => (
+        <label key={name} className="vrs-check-card">
+          <input
+            type="checkbox"
+            name={name}
+            checked={vrsForm[name]}
+            onChange={handleVrsChange}
+          />
+          <span>{label}</span>
+        </label>
+      ))}
+    </div>
+  </div>
+</div>
 
                 <div className="form-group full-width">
                   <label>VRS Comments</label>
