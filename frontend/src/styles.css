@@ -4664,3 +4664,47 @@ tbody tr:nth-child(even),
     flex-direction: column;
   }
 }
+.vrs-form-section {
+  margin-top: 26px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid #d6e0e5;
+  background: #f8fbfc;
+}
+
+.vrs-form-section h2 {
+  margin: 0;
+  color: #09212c;
+}
+
+.vrs-form-section p {
+  margin: 6px 0 18px;
+  color: #60717a;
+}
+
+.vrs-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vrs-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #d6e0e5;
+  border-radius: 12px;
+  padding: 10px;
+  font-weight: 700;
+}
+
+.vrs-checkbox input {
+  width: auto;
+}
+
+@media (max-width: 900px) {
+  .vrs-checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+}

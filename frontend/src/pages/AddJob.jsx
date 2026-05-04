@@ -3,7 +3,7 @@ import api from "../services/api";
 import { statusOptions } from "../constants/statusOptions";
 
 function AddJob() {
-  const [form, setForm] = useState({
+  const emptyForm = {
     job_number: "",
     title: "",
     work_order: "",
@@ -20,7 +20,36 @@ function AddJob() {
     status: "Planned",
     planned_date: "",
     notes: "",
-  });
+  };
+
+  const emptyVrsForm = {
+    category: "",
+    incident_number: "",
+    marker_post: "",
+    carriageway_side: "",
+    closure_type: "",
+    number_of_ops: "",
+    estimated_duration: "",
+    posts_required: "",
+    beams_required: "",
+    components_required: "",
+    diagnosis_required: false,
+    diagnosis_complete: false,
+    concrete_required: false,
+    coring_required: false,
+    push_test_required: false,
+    excavation_required: false,
+    cat_scan_required: false,
+    permit_to_dig_required: false,
+    cold_patch_required: false,
+    amm12_score: "",
+    nc_required: false,
+    comments: "",
+    notes: "",
+  };
+
+  const [form, setForm] = useState(emptyForm);
+  const [vrsForm, setVrsForm] = useState(emptyVrsForm);
 
   const [closures, setClosures] = useState([]);
   const [workstreams, setWorkstreams] = useState([]);
@@ -35,6 +64,15 @@ function AddJob() {
     fetchWorkstreams();
     fetchSubcontractors();
   }, []);
+
+  const selectedWorkstream = useMemo(
+    () => workstreams.find((w) => String(w.id) === String(form.workstream_id)),
+    [workstreams, form.workstream_id]
+  );
+
+  const isVrsJob = String(selectedWorkstream?.name || "")
+    .toLowerCase()
+    .includes("vrs");
 
   const fetchClosures = async () => {
     try {
@@ -116,26 +154,18 @@ function AddJob() {
     }));
   };
 
-  const resetForm = () => {
-    setForm({
-      job_number: "",
-      title: "",
-      work_order: "",
-      activity: "",
-      location: "",
-      description: "",
-      activity_code: "",
-      closure_id: "",
-      workstream_id: "",
-      subcontractor_id: "",
-      subcontractor_contact_id: "",
-      start_mp: "",
-      end_mp: "",
-      status: "Planned",
-      planned_date: "",
-      notes: "",
-    });
+  const handleVrsChange = (e) => {
+    const { name, value, type, checked } = e.target;
 
+    setVrsForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setVrsForm(emptyVrsForm);
     setContacts([]);
   };
 
@@ -156,13 +186,27 @@ function AddJob() {
     }
 
     try {
-      await api.post("/jobs", {
+      const jobRes = await api.post("/jobs", {
         ...form,
         subcontractor_id: form.subcontractor_id || null,
         subcontractor_contact_id: form.subcontractor_contact_id || null,
       });
 
-      setMessage("Job created successfully.");
+      const jobId = jobRes.data?.id;
+
+      if (isVrsJob && jobId) {
+        await api.post(`/jobs/${jobId}/vrs`, {
+          ...vrsForm,
+          number_of_ops: vrsForm.number_of_ops || null,
+          amm12_score: vrsForm.amm12_score || null,
+        });
+      }
+
+      setMessage(
+        isVrsJob
+          ? "VRS job created successfully."
+          : "Job created successfully."
+      );
       setMessageType("success");
       resetForm();
     } catch (err) {
@@ -395,6 +439,182 @@ function AddJob() {
               />
             </div>
           </div>
+
+          {isVrsJob && (
+            <div className="vrs-form-section">
+              <h2>VRS Details</h2>
+              <p>
+                Complete the VRS repair requirements from the diagnosis sheet.
+              </p>
+
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Category</label>
+                  <select
+                    name="category"
+                    value={vrsForm.category}
+                    onChange={handleVrsChange}
+                  >
+                    <option value="">Select category</option>
+                    <option value="CAT 1">CAT 1</option>
+                    <option value="CAT 2.1">CAT 2.1</option>
+                    <option value="CAT 2.2">CAT 2.2</option>
+                    <option value="CAT 2.3">CAT 2.3</option>
+                    <option value="NFA">NFA</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Incident Number</label>
+                  <input
+                    type="text"
+                    name="incident_number"
+                    value={vrsForm.incident_number}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Marker Post</label>
+                  <input
+                    type="text"
+                    name="marker_post"
+                    value={vrsForm.marker_post}
+                    onChange={handleVrsChange}
+                    placeholder="Example: 102/3"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>A or B</label>
+                  <select
+                    name="carriageway_side"
+                    value={vrsForm.carriageway_side}
+                    onChange={handleVrsChange}
+                  >
+                    <option value="">Select</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="Both">Both</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Closure Type</label>
+                  <input
+                    type="text"
+                    name="closure_type"
+                    value={vrsForm.closure_type}
+                    onChange={handleVrsChange}
+                    placeholder="Example: L3/2 A L3 B"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>No. of Ops</label>
+                  <input
+                    type="number"
+                    name="number_of_ops"
+                    value={vrsForm.number_of_ops}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Estimated Duration</label>
+                  <input
+                    type="text"
+                    name="estimated_duration"
+                    value={vrsForm.estimated_duration}
+                    onChange={handleVrsChange}
+                    placeholder="Example: 2-3 hours"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>AMM12 Score</label>
+                  <input
+                    type="number"
+                    name="amm12_score"
+                    value={vrsForm.amm12_score}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>Posts Required</label>
+                  <textarea
+                    name="posts_required"
+                    value={vrsForm.posts_required}
+                    onChange={handleVrsChange}
+                    placeholder="Example: 12x TCB, 8x CR Long, 4x New Spec"
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>Beams Required</label>
+                  <textarea
+                    name="beams_required"
+                    value={vrsForm.beams_required}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>Other Components Required</label>
+                  <textarea
+                    name="components_required"
+                    value={vrsForm.components_required}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+
+                <div className="vrs-checkbox-grid full-width">
+                  {[
+                    ["diagnosis_required", "Diagnosis Required"],
+                    ["diagnosis_complete", "Diagnosis Complete"],
+                    ["concrete_required", "Concrete"],
+                    ["coring_required", "Coring"],
+                    ["push_test_required", "Push Test"],
+                    ["excavation_required", "Excavation"],
+                    ["cat_scan_required", "CAT Scan"],
+                    ["permit_to_dig_required", "Permit to Dig"],
+                    ["cold_patch_required", "Cold Patch"],
+                    ["nc_required", "NC Required"],
+                  ].map(([name, label]) => (
+                    <label key={name} className="vrs-checkbox">
+                      <input
+                        type="checkbox"
+                        name={name}
+                        checked={vrsForm[name]}
+                        onChange={handleVrsChange}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+
+                <div className="form-group full-width">
+                  <label>VRS Comments</label>
+                  <textarea
+                    name="comments"
+                    value={vrsForm.comments}
+                    onChange={handleVrsChange}
+                    placeholder="Example: 3 posts have been replaced with long driven. Possible dig out required."
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label>VRS Notes</label>
+                  <textarea
+                    name="notes"
+                    value={vrsForm.notes}
+                    onChange={handleVrsChange}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ marginTop: "20px" }}>
             <button type="submit">Create Job</button>
