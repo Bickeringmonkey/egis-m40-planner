@@ -1404,6 +1404,155 @@ app.post("/api/jobs/import/commit", auth, requireRole("admin", "planner"), (req,
   });
 });
 // -----------------------------
+// VRS Job Details
+// -----------------------------
+app.get("/api/jobs/:id/vrs", auth, (req, res) => {
+  const jobId = req.params.id;
+
+  const sql = `
+    SELECT *
+    FROM vrs_job_details
+    WHERE job_id = ?
+    LIMIT 1
+  `;
+
+  db.query(sql, [jobId], (err, results) => {
+    if (err) {
+      console.error("Fetch VRS details error:", err);
+      return res.status(500).json({ error: "Failed to fetch VRS details" });
+    }
+
+    res.json(results[0] || null);
+  });
+});
+
+app.post(
+  "/api/jobs/:id/vrs",
+  auth,
+  requireRole("admin", "planner"),
+  (req, res) => {
+    const jobId = req.params.id;
+
+    const {
+      category,
+      incident_number,
+      marker_post,
+      carriageway_side,
+      closure_type,
+      number_of_ops,
+      estimated_duration,
+      posts_required,
+      beams_required,
+      components_required,
+      diagnosis_required,
+      diagnosis_complete,
+      concrete_required,
+      coring_required,
+      push_test_required,
+      excavation_required,
+      cat_scan_required,
+      permit_to_dig_required,
+      cold_patch_required,
+      amm12_score,
+      nc_required,
+      comments,
+      notes,
+    } = req.body;
+
+    const sql = `
+      INSERT INTO vrs_job_details (
+        job_id,
+        category,
+        incident_number,
+        marker_post,
+        carriageway_side,
+        closure_type,
+        number_of_ops,
+        estimated_duration,
+        posts_required,
+        beams_required,
+        components_required,
+        diagnosis_required,
+        diagnosis_complete,
+        concrete_required,
+        coring_required,
+        push_test_required,
+        excavation_required,
+        cat_scan_required,
+        permit_to_dig_required,
+        cold_patch_required,
+        amm12_score,
+        nc_required,
+        comments,
+        notes
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        category = VALUES(category),
+        incident_number = VALUES(incident_number),
+        marker_post = VALUES(marker_post),
+        carriageway_side = VALUES(carriageway_side),
+        closure_type = VALUES(closure_type),
+        number_of_ops = VALUES(number_of_ops),
+        estimated_duration = VALUES(estimated_duration),
+        posts_required = VALUES(posts_required),
+        beams_required = VALUES(beams_required),
+        components_required = VALUES(components_required),
+        diagnosis_required = VALUES(diagnosis_required),
+        diagnosis_complete = VALUES(diagnosis_complete),
+        concrete_required = VALUES(concrete_required),
+        coring_required = VALUES(coring_required),
+        push_test_required = VALUES(push_test_required),
+        excavation_required = VALUES(excavation_required),
+        cat_scan_required = VALUES(cat_scan_required),
+        permit_to_dig_required = VALUES(permit_to_dig_required),
+        cold_patch_required = VALUES(cold_patch_required),
+        amm12_score = VALUES(amm12_score),
+        nc_required = VALUES(nc_required),
+        comments = VALUES(comments),
+        notes = VALUES(notes)
+    `;
+
+    db.query(
+      sql,
+      [
+        jobId,
+        category || null,
+        incident_number || null,
+        marker_post || null,
+        carriageway_side || null,
+        closure_type || null,
+        number_of_ops || null,
+        estimated_duration || null,
+        posts_required || null,
+        beams_required || null,
+        components_required || null,
+        diagnosis_required ? 1 : 0,
+        diagnosis_complete ? 1 : 0,
+        concrete_required ? 1 : 0,
+        coring_required ? 1 : 0,
+        push_test_required ? 1 : 0,
+        excavation_required ? 1 : 0,
+        cat_scan_required ? 1 : 0,
+        permit_to_dig_required ? 1 : 0,
+        cold_patch_required ? 1 : 0,
+        amm12_score || null,
+        nc_required ? 1 : 0,
+        comments || null,
+        notes || null,
+      ],
+      (err) => {
+        if (err) {
+          console.error("Save VRS details error:", err);
+          return res.status(500).json({ error: "Failed to save VRS details" });
+        }
+
+        res.json({ message: "VRS details saved" });
+      }
+    );
+  }
+);
+// -----------------------------
 // Subcontractors
 // -----------------------------
 app.get("/api/subcontractors", auth, (req, res) => {
