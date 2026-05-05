@@ -311,7 +311,17 @@ function VrsReport() {
                     </td>
                     <td>{job.marker_post || job.location || "—"}</td>
                     <td>{job.carriageway_side || "—"}</td>
-                    <td>{job.closure_ref || "—"}</td>
+                    <td>
+                    {job.closure_id ? (
+                        <Link to={`/closures/${job.closure_id}`} className="table-link-strong">
+                        {job.closure_ref || "View Closure"}
+                        </Link>
+                    ) : (
+                        <Link to={`/jobs/${job.job_id}/edit`} className="vrs-link-closure-btn">
+                        Link Closure
+                        </Link>
+                    )}
+                    </td>
                     <td>{job.estimated_duration || "—"}</td>
                     <td>{job.number_of_ops || "—"}</td>
                     <td>{yesNo(job.diagnosis_complete)}</td>

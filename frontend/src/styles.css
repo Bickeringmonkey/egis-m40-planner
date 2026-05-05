@@ -4974,3 +4974,22 @@ tbody tr:nth-child(even),
   color: #b42318;
   border: 1px solid #f5b5b5;
 }
+.vrs-link-closure-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #eef8fb;
+  border: 1px solid #00617e;
+  color: #00617e;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.vrs-link-closure-btn:hover {
+  background: #00617e;
+  color: #ffffff;
+}
