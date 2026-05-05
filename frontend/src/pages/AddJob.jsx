@@ -174,13 +174,8 @@ function AddJob() {
     setMessage("");
     setMessageType("");
 
-    if (
-      !form.job_number.trim() ||
-      !form.closure_id ||
-      !form.workstream_id ||
-      !form.planned_date
-    ) {
-      setMessage("Please complete all required fields.");
+    if (!form.job_number.trim() || !form.workstream_id || !form.planned_date) {
+      setMessage("Please complete job number, workstream and planned date.");
       setMessageType("error");
       return;
     }
@@ -188,6 +183,7 @@ function AddJob() {
     try {
       const jobRes = await api.post("/jobs", {
         ...form,
+        closure_id: form.closure_id || null,
         subcontractor_id: form.subcontractor_id || null,
         subcontractor_contact_id: form.subcontractor_contact_id || null,
       });
@@ -204,7 +200,7 @@ function AddJob() {
 
       setMessage(
         isVrsJob
-          ? "VRS job created successfully."
+          ? "VRS job created successfully. Closure can be linked later."
           : "Job created successfully."
       );
       setMessageType("success");
@@ -224,7 +220,9 @@ function AddJob() {
   return (
     <div>
       <h1 className="page-title">Add Job</h1>
-      <p className="page-subtitle">Create a new job and assign it to a closure.</p>
+      <p className="page-subtitle">
+        Create a new job. A closure can be linked now or added later.
+      </p>
 
       <div className="form-card">
         <form onSubmit={handleSubmit}>
@@ -296,14 +294,14 @@ function AddJob() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="closure_id">Closure *</label>
+              <label htmlFor="closure_id">Closure</label>
               <select
                 id="closure_id"
                 name="closure_id"
                 value={form.closure_id}
                 onChange={handleChange}
               >
-                <option value="">Select a closure</option>
+                <option value="">No closure assigned yet</option>
                 {closures.map((closure) => (
                   <option key={closure.id} value={closure.id}>
                     {closure.closure_ref} - {formatDate(closure.closure_date)}
@@ -443,18 +441,12 @@ function AddJob() {
           {isVrsJob && (
             <div className="vrs-form-section">
               <h2>VRS Details</h2>
-              <p>
-                Complete the VRS repair requirements from the diagnosis sheet.
-              </p>
+              <p>Complete the VRS repair requirements from the diagnosis sheet.</p>
 
               <div className="form-grid">
                 <div className="form-group">
                   <label>Category</label>
-                  <select
-                    name="category"
-                    value={vrsForm.category}
-                    onChange={handleVrsChange}
-                  >
+                  <select name="category" value={vrsForm.category} onChange={handleVrsChange}>
                     <option value="">Select category</option>
                     <option value="CAT 1">CAT 1</option>
                     <option value="CAT 2.1">CAT 2.1</option>
@@ -466,32 +458,17 @@ function AddJob() {
 
                 <div className="form-group">
                   <label>Incident Number</label>
-                  <input
-                    type="text"
-                    name="incident_number"
-                    value={vrsForm.incident_number}
-                    onChange={handleVrsChange}
-                  />
+                  <input type="text" name="incident_number" value={vrsForm.incident_number} onChange={handleVrsChange} />
                 </div>
 
                 <div className="form-group">
                   <label>Marker Post</label>
-                  <input
-                    type="text"
-                    name="marker_post"
-                    value={vrsForm.marker_post}
-                    onChange={handleVrsChange}
-                    placeholder="Example: 102/3"
-                  />
+                  <input type="text" name="marker_post" value={vrsForm.marker_post} onChange={handleVrsChange} placeholder="Example: 102/3" />
                 </div>
 
                 <div className="form-group">
                   <label>A or B</label>
-                  <select
-                    name="carriageway_side"
-                    value={vrsForm.carriageway_side}
-                    onChange={handleVrsChange}
-                  >
+                  <select name="carriageway_side" value={vrsForm.carriageway_side} onChange={handleVrsChange}>
                     <option value="">Select</option>
                     <option value="A">A</option>
                     <option value="B">B</option>
@@ -501,128 +478,81 @@ function AddJob() {
 
                 <div className="form-group">
                   <label>Closure Type</label>
-                  <input
-                    type="text"
-                    name="closure_type"
-                    value={vrsForm.closure_type}
-                    onChange={handleVrsChange}
-                    placeholder="Example: L3/2 A L3 B"
-                  />
+                  <input type="text" name="closure_type" value={vrsForm.closure_type} onChange={handleVrsChange} placeholder="Example: L3/2 A L3 B" />
                 </div>
 
                 <div className="form-group">
                   <label>No. of Ops</label>
-                  <input
-                    type="number"
-                    name="number_of_ops"
-                    value={vrsForm.number_of_ops}
-                    onChange={handleVrsChange}
-                  />
+                  <input type="number" name="number_of_ops" value={vrsForm.number_of_ops} onChange={handleVrsChange} />
                 </div>
 
                 <div className="form-group">
                   <label>Estimated Duration</label>
-                  <input
-                    type="text"
-                    name="estimated_duration"
-                    value={vrsForm.estimated_duration}
-                    onChange={handleVrsChange}
-                    placeholder="Example: 2-3 hours"
-                  />
+                  <input type="text" name="estimated_duration" value={vrsForm.estimated_duration} onChange={handleVrsChange} placeholder="Example: 2-3 hours" />
                 </div>
 
                 <div className="form-group">
                   <label>AMM12 Score</label>
-                  <input
-                    type="number"
-                    name="amm12_score"
-                    value={vrsForm.amm12_score}
-                    onChange={handleVrsChange}
-                  />
+                  <input type="number" name="amm12_score" value={vrsForm.amm12_score} onChange={handleVrsChange} />
                 </div>
 
                 <div className="form-group full-width">
                   <label>Posts Required</label>
-                  <textarea
-                    name="posts_required"
-                    value={vrsForm.posts_required}
-                    onChange={handleVrsChange}
-                    placeholder="Example: 12x TCB, 8x CR Long, 4x New Spec"
-                  />
+                  <textarea name="posts_required" value={vrsForm.posts_required} onChange={handleVrsChange} placeholder="Example: 12x TCB, 8x CR Long, 4x New Spec" />
                 </div>
 
                 <div className="form-group full-width">
                   <label>Beams Required</label>
-                  <textarea
-                    name="beams_required"
-                    value={vrsForm.beams_required}
-                    onChange={handleVrsChange}
-                  />
+                  <textarea name="beams_required" value={vrsForm.beams_required} onChange={handleVrsChange} />
                 </div>
 
                 <div className="form-group full-width">
                   <label>Other Components Required</label>
-                  <textarea
-                    name="components_required"
-                    value={vrsForm.components_required}
-                    onChange={handleVrsChange}
-                  />
+                  <textarea name="components_required" value={vrsForm.components_required} onChange={handleVrsChange} />
                 </div>
 
                 <div className="vrs-checklist-panel full-width">
-  <div className="vrs-checklist-header">
-    <h3>VRS Requirements Checklist</h3>
-    <p>Tick what is required from the diagnosis sheet.</p>
-  </div>
+                  <div className="vrs-checklist-header">
+                    <h3>VRS Requirements Checklist</h3>
+                    <p>Tick what is required from the diagnosis sheet.</p>
+                  </div>
 
-  <div className="vrs-checklist-section">
-    <h4>Diagnosis Status</h4>
+                  <div className="vrs-checklist-section">
+                    <h4>Diagnosis Status</h4>
+                    <div className="vrs-checklist-grid">
+                      {[
+                        ["diagnosis_required", "Diagnosis Required"],
+                        ["diagnosis_complete", "Diagnosis Complete"],
+                      ].map(([name, label]) => (
+                        <label key={name} className="vrs-check-card">
+                          <input type="checkbox" name={name} checked={vrsForm[name]} onChange={handleVrsChange} />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-    <div className="vrs-checklist-grid">
-      {[
-        ["diagnosis_required", "Diagnosis Required"],
-        ["diagnosis_complete", "Diagnosis Complete"],
-      ].map(([name, label]) => (
-        <label key={name} className="vrs-check-card">
-          <input
-            type="checkbox"
-            name={name}
-            checked={vrsForm[name]}
-            onChange={handleVrsChange}
-          />
-          <span>{label}</span>
-        </label>
-      ))}
-    </div>
-  </div>
-
-  <div className="vrs-checklist-section">
-    <h4>Repair Requirements</h4>
-
-    <div className="vrs-checklist-grid">
-      {[
-        ["concrete_required", "Concrete"],
-        ["coring_required", "Coring"],
-        ["push_test_required", "Push Test"],
-        ["excavation_required", "Excavation"],
-        ["cat_scan_required", "CAT Scan"],
-        ["permit_to_dig_required", "Permit to Dig"],
-        ["cold_patch_required", "Cold Patch"],
-        ["nc_required", "NC Required"],
-      ].map(([name, label]) => (
-        <label key={name} className="vrs-check-card">
-          <input
-            type="checkbox"
-            name={name}
-            checked={vrsForm[name]}
-            onChange={handleVrsChange}
-          />
-          <span>{label}</span>
-        </label>
-      ))}
-    </div>
-  </div>
-</div>
+                  <div className="vrs-checklist-section">
+                    <h4>Repair Requirements</h4>
+                    <div className="vrs-checklist-grid">
+                      {[
+                        ["concrete_required", "Concrete"],
+                        ["coring_required", "Coring"],
+                        ["push_test_required", "Push Test"],
+                        ["excavation_required", "Excavation"],
+                        ["cat_scan_required", "CAT Scan"],
+                        ["permit_to_dig_required", "Permit to Dig"],
+                        ["cold_patch_required", "Cold Patch"],
+                        ["nc_required", "NC Required"],
+                      ].map(([name, label]) => (
+                        <label key={name} className="vrs-check-card">
+                          <input type="checkbox" name={name} checked={vrsForm[name]} onChange={handleVrsChange} />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
                 <div className="form-group full-width">
                   <label>VRS Comments</label>
@@ -636,11 +566,7 @@ function AddJob() {
 
                 <div className="form-group full-width">
                   <label>VRS Notes</label>
-                  <textarea
-                    name="notes"
-                    value={vrsForm.notes}
-                    onChange={handleVrsChange}
-                  />
+                  <textarea name="notes" value={vrsForm.notes} onChange={handleVrsChange} />
                 </div>
               </div>
             </div>

@@ -65,8 +65,8 @@ function EditJob() {
         notes: job.notes || "",
       });
 
-      setClosures(closuresRes.data);
-      setWorkstreams(workstreamsRes.data);
+      setClosures(closuresRes.data || []);
+      setWorkstreams(workstreamsRes.data || []);
     } catch (err) {
       console.error("Error loading edit job page:", err);
       setMessage("Failed to load job data.");
@@ -86,13 +86,17 @@ function EditJob() {
     e.preventDefault();
     setMessage("");
 
-    if (!form.job_number || !form.closure_id || !form.workstream_id) {
-      setMessage("Please complete the required fields.");
+    if (!form.job_number || !form.workstream_id || !form.planned_date) {
+      setMessage("Please complete job number, workstream and planned date.");
       return;
     }
 
     try {
-      await api.put(`/jobs/${id}`, form);
+      await api.put(`/jobs/${id}`, {
+        ...form,
+        closure_id: form.closure_id || null,
+      });
+
       setMessage("Job updated successfully.");
 
       setTimeout(() => {
@@ -100,7 +104,7 @@ function EditJob() {
       }, 700);
     } catch (err) {
       console.error("Error updating job:", err);
-      setMessage("Failed to update job.");
+      setMessage(err.response?.data?.error || "Failed to update job.");
     }
   };
 
@@ -132,7 +136,9 @@ function EditJob() {
       </div>
 
       <h1 className="page-title">Edit Job</h1>
-      <p className="page-subtitle">Update the details for this job.</p>
+      <p className="page-subtitle">
+        Update this job. A closure can be linked now or added later.
+      </p>
 
       <div className="detail-divider" />
 
@@ -222,13 +228,13 @@ function EditJob() {
 
           <div className="detail-form-grid">
             <div className="form-group">
-              <label>Closure *</label>
+              <label>Closure</label>
               <select
                 name="closure_id"
                 value={form.closure_id}
                 onChange={handleChange}
               >
-                <option value="">Select a closure</option>
+                <option value="">No closure assigned yet</option>
                 {closures.map((closure) => (
                   <option key={closure.id} value={closure.id}>
                     {closure.closure_ref} - {formatDate(closure.closure_date)}
@@ -238,7 +244,7 @@ function EditJob() {
             </div>
 
             <div className="form-group">
-              <label>Planned Date</label>
+              <label>Planned Date *</label>
               <input
                 type="date"
                 name="planned_date"

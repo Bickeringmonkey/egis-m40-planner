@@ -926,6 +926,12 @@ app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
     notes,
   } = req.body;
 
+  if (!job_number || !workstream_id || !planned_date) {
+    return res.status(400).json({
+      error: "Job number, workstream and planned date are required",
+    });
+  }
+
   const sql = `
     INSERT INTO jobs (
       job_number, title, work_order, activity, location, description, activity_code,
@@ -945,20 +951,24 @@ app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
       location || null,
       description || null,
       activity_code || null,
-      closure_id,
+      closure_id || null,
       workstream_id,
       subcontractor_id || null,
       subcontractor_contact_id || null,
       start_mp || null,
       end_mp || null,
-      status || null,
+      status || "Planned",
       planned_date || null,
       notes || null,
     ],
     (err, result) => {
       if (err) {
         console.error("Job insert error:", err);
-        return res.status(500).json({ error: "Insert failed" });
+        return res.status(500).json({
+          error: "Insert failed",
+          details: err.message,
+          sqlMessage: err.sqlMessage,
+        });
       }
 
       res.json({ message: "Job created", id: result.insertId });
@@ -967,7 +977,22 @@ app.post("/api/jobs", auth, requireRole("admin", "planner"), (req, res) => {
 });
 
 app.put("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) => {
-  const { job_number, title, work_order, activity, location, description, activity_code, closure_id, workstream_id, start_mp, end_mp, status, planned_date, notes } = req.body;
+  const {
+    job_number,
+    title,
+    work_order,
+    activity,
+    location,
+    description,
+    activity_code,
+    closure_id,
+    workstream_id,
+    start_mp,
+    end_mp,
+    status,
+    planned_date,
+    notes,
+  } = req.body;
 
   const sql = `
     UPDATE jobs
@@ -979,9 +1004,33 @@ app.put("/api/jobs/:id", auth, requireRole("admin", "planner"), (req, res) => {
 
   db.query(
     sql,
-    [job_number, title || null, work_order || null, activity || null, location || null, description || null, activity_code || null, closure_id, workstream_id, start_mp || null, end_mp || null, status || null, planned_date || null, notes || null, req.params.id],
+    [
+      job_number,
+      title || null,
+      work_order || null,
+      activity || null,
+      location || null,
+      description || null,
+      activity_code || null,
+      closure_id || null,
+      workstream_id,
+      start_mp || null,
+      end_mp || null,
+      status || "Planned",
+      planned_date || null,
+      notes || null,
+      req.params.id,
+    ],
     (err) => {
-      if (err) return res.status(500).json({ error: "Failed to update job" });
+      if (err) {
+        console.error("Job update error:", err);
+        return res.status(500).json({
+          error: "Failed to update job",
+          details: err.message,
+          sqlMessage: err.sqlMessage,
+        });
+      }
+
       res.json({ message: "Job updated successfully" });
     }
   );
