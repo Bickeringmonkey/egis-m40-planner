@@ -141,40 +141,53 @@ function JobDetail() {
       </div>
 
       <div className="detail-card linked-card">
-        <div className="linked-card-header">
-          <div className="linked-card-icon">↗</div>
-          <h2>Linked Closure</h2>
-        </div>
+  <div className="linked-card-header">
+    <div className="linked-card-icon">↗</div>
+    <h2>Linked Closure</h2>
+  </div>
 
-        <div className="detail-divider subtle" />
+  <div className="detail-divider subtle" />
 
-        <div className="linked-grid">
-          <div className="linked-item">
-            <div className="linked-label">Closure Ref</div>
-            <div className="linked-value">
-              {job.closure_id ? (
-                <Link to={`/closures/${job.closure_id}`}>{job.closure_ref}</Link>
-              ) : (
-                "None"
-              )}
-            </div>
-          </div>
-
-          <div className="linked-item">
-            <div className="linked-label">Closure Date</div>
-            <div className="linked-value">{formatDate(job.closure_date) || "None"}</div>
-          </div>
-
-          <div className="linked-item">
-            <div className="linked-label">Carriageway</div>
-            <div className="linked-value">{job.carriageway || "None"}</div>
+  {job.closure_id ? (
+    <>
+      <div className="linked-grid">
+        <div className="linked-item">
+          <div className="linked-label">Closure Ref</div>
+          <div className="linked-value">
+            <Link to={`/closures/${job.closure_id}`}>{job.closure_ref}</Link>
           </div>
         </div>
 
-        <div className="linked-note">
-          This job is linked to the closure above.
+        <div className="linked-item">
+          <div className="linked-label">Closure Date</div>
+          <div className="linked-value">
+            {formatDate(job.closure_date) || "None"}
+          </div>
+        </div>
+
+        <div className="linked-item">
+          <div className="linked-label">Carriageway</div>
+          <div className="linked-value">{job.carriageway || "None"}</div>
         </div>
       </div>
+
+      <div className="linked-note">
+        This job is linked to the closure above.
+      </div>
+    </>
+  ) : (
+    <div className="linked-empty-state">
+      <strong>No closure assigned yet</strong>
+      <p>
+        This job can be linked to a closure later from the edit job page.
+      </p>
+
+      <Link to={`/jobs/${id}/edit`} className="detail-btn">
+        Link Closure
+      </Link>
+    </div>
+  )}
+</div>
 
       {deleteMessage && (
         <p className="form-message" style={{ color: "#9d2f2f" }}>
