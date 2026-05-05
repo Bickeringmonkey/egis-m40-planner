@@ -36,6 +36,7 @@ import ImportJobs from "./pages/ImportJobs";
 import Issues from "./pages/Issues";
 import Subcontractors from "./pages/Subcontractors";
 import VrsReport from "./pages/VrsReport";
+import VrsBooking from "./pages/VrsBooking";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -283,6 +284,14 @@ function AppShell() {
                   <VrsReport />
                 </ProtectedRoute>
               }
+            />
+            <Route
+                path="/jobs/vrs/new"
+                element={
+                  <ProtectedRoute roles={["admin", "planner"]}>
+                    <VrsBooking />
+                  </ProtectedRoute>
+                }
             />
 
           <Route

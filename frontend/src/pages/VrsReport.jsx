@@ -98,6 +98,9 @@ function VrsReport() {
           <button type="button" className="detail-btn" onClick={loadVrsReport}>
             Refresh
           </button>
+          <Link to="/jobs/vrs/new" className="detail-btn">
+            Add Barrier Job
+          </Link>
 
           <Link to="/jobs" className="detail-btn detail-btn-secondary">
             Back to Jobs

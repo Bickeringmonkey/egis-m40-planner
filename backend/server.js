@@ -1485,6 +1485,10 @@ app.post(
     const {
       category,
       incident_number,
+      date_in,
+      programmed_date,
+      repair_date,
+      run_over_date,
       marker_post,
       carriageway_side,
       closure_type,
@@ -1513,6 +1517,10 @@ app.post(
         job_id,
         category,
         incident_number,
+        date_in,
+        programmed_date,
+        repair_date,
+        run_over_date,
         marker_post,
         carriageway_side,
         closure_type,
@@ -1535,10 +1543,14 @@ app.post(
         comments,
         notes
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,)
       ON DUPLICATE KEY UPDATE
         category = VALUES(category),
         incident_number = VALUES(incident_number),
+        date_in = VALUES(date_in),
+        programmed_date = VALUES(programmed_date),
+        repair_date = VALUES(repair_date),
+        run_over_date = VALUES(run_over_date),
         marker_post = VALUES(marker_post),
         carriageway_side = VALUES(carriageway_side),
         closure_type = VALUES(closure_type),
@@ -1568,6 +1580,10 @@ app.post(
         jobId,
         category || null,
         incident_number || null,
+        date_in || null,
+        programmed_date || null,
+        repair_date || null,
+        run_over_date || null,
         marker_post || null,
         carriageway_side || null,
         closure_type || null,
