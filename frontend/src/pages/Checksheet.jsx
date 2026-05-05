@@ -63,6 +63,9 @@ function Checksheet() {
       supervisor_checked: !!job.supervisor_checked,
       paperwork_checked: !!job.paperwork_checked,
       issue_flagged: !!job.issue_flagged,
+      issue_reason: job.issue_flagged
+        ? job.completion_notes || "Supervisor flagged issue"
+        : null,
       completion_notes: job.completion_notes || "",
       saved_at: new Date().toISOString(),
     });
@@ -81,11 +84,15 @@ function Checksheet() {
           supervisor_checked: !!job.supervisor_checked,
           paperwork_checked: !!job.paperwork_checked,
           issue_flagged: !!job.issue_flagged,
+          issue_reason: job.issue_flagged
+            ? job.issue_reason || job.completion_notes || "Supervisor flagged issue"
+            : null,
           completion_notes: job.completion_notes || "",
         });
       }
 
       setOfflineQueue([]);
+      setIsOnline(true);
       setMessage("Offline checklist data synced.");
 
       if (date && closureId) {
@@ -93,8 +100,22 @@ function Checksheet() {
       }
     } catch (err) {
       console.error("Offline sync failed:", err);
+
+      const isNetworkError = !err.response;
+
+      if (isNetworkError) {
+        setIsOnline(false);
+        refreshOfflineCount();
+        setMessage("Still offline. Data is saved on this device.");
+        return;
+      }
+
+      setIsOnline(true);
       refreshOfflineCount();
-      setMessage("Sync failed. Offline data is still saved on this device.");
+      setMessage(
+        err.response?.data?.error ||
+          "Sync failed because of a server/checksheet error. Offline data is still saved."
+      );
     }
   };
 
@@ -130,9 +151,20 @@ function Checksheet() {
         `/checksheet/jobs?date=${date}&closureId=${closureId}`
       );
 
+      setIsOnline(true);
       setJobs(res.data || []);
     } catch (err) {
       console.error(err);
+
+      const isNetworkError = !err.response;
+
+      if (isNetworkError) {
+        setIsOnline(false);
+        setMessage("No signal. Could not load checklist.");
+        return;
+      }
+
+      setIsOnline(true);
       setMessage(err.response?.data?.error || "Failed to load checklist.");
     } finally {
       setLoading(false);
@@ -159,9 +191,7 @@ function Checksheet() {
   };
 
   const saveSupervisorCheck = async (job) => {
-    const currentlyOnline = navigator.onLine;
-
-    if (!currentlyOnline) {
+    if (!navigator.onLine) {
       saveOffline(job);
       setIsOnline(false);
       refreshOfflineCount();
@@ -176,26 +206,38 @@ function Checksheet() {
         supervisor_checked: !!job.supervisor_checked,
         paperwork_checked: !!job.paperwork_checked,
         issue_flagged: !!job.issue_flagged,
+        issue_reason: job.issue_flagged
+          ? job.completion_notes || "Supervisor flagged issue"
+          : null,
         completion_notes: job.completion_notes || "",
       });
 
+      setIsOnline(true);
       setMessage(`Saved ${job.job_number}.`);
       loadJobs();
     } catch (err) {
-      console.error(err);
+      console.error("Save checklist error:", err);
 
-      saveOffline(job);
-      refreshOfflineCount();
-      setIsOnline(false);
+      const isNetworkError = !err.response;
 
-      setMessage(`No signal. Saved offline: ${job.job_number}.`);
+      if (isNetworkError) {
+        saveOffline(job);
+        refreshOfflineCount();
+        setIsOnline(false);
+        setMessage(`No signal. Saved offline: ${job.job_number}.`);
+        return;
+      }
+
+      setIsOnline(true);
+      setMessage(
+        err.response?.data?.error ||
+          "Save failed. This is a server/checksheet issue, not offline mode."
+      );
     }
   };
 
   const saveAll = async () => {
-    const currentlyOnline = navigator.onLine;
-
-    if (!currentlyOnline) {
+    if (!navigator.onLine) {
       jobs.forEach((job) => saveOffline(job));
       setIsOnline(false);
       refreshOfflineCount();
@@ -212,20 +254,34 @@ function Checksheet() {
           supervisor_checked: !!job.supervisor_checked,
           paperwork_checked: !!job.paperwork_checked,
           issue_flagged: !!job.issue_flagged,
+          issue_reason: job.issue_flagged
+            ? job.completion_notes || "Supervisor flagged issue"
+            : null,
           completion_notes: job.completion_notes || "",
         });
       }
 
+      setIsOnline(true);
       setMessage("All checklist items saved.");
       loadJobs();
     } catch (err) {
-      console.error(err);
+      console.error("Save all checklist error:", err);
 
-      jobs.forEach((job) => saveOffline(job));
-      refreshOfflineCount();
-      setIsOnline(false);
+      const isNetworkError = !err.response;
 
-      setMessage("No signal. All checklist items saved offline.");
+      if (isNetworkError) {
+        jobs.forEach((job) => saveOffline(job));
+        refreshOfflineCount();
+        setIsOnline(false);
+        setMessage("No signal. All checklist items saved offline.");
+        return;
+      }
+
+      setIsOnline(true);
+      setMessage(
+        err.response?.data?.error ||
+          "Save failed. This is a server/checksheet issue, not offline mode."
+      );
     } finally {
       setLoading(false);
     }
@@ -389,7 +445,9 @@ function Checksheet() {
           {jobs.map((job) => (
             <div
               key={job.id}
-              className={`mobile-check-card ${job.issue_flagged ? "mobile-check-card-issue" : ""}`}
+              className={`mobile-check-card ${
+                job.issue_flagged ? "mobile-check-card-issue" : ""
+              }`}
             >
               <div className="mobile-check-card-top">
                 <div>
