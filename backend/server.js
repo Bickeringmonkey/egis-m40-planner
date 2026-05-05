@@ -2256,9 +2256,11 @@ app.put("/api/jobs/:id/supervisor-check", auth, requireRole("admin", "supervisor
     (err, result) => {
       if (err) {
         console.error("Supervisor check error:", err);
-        return res.status(500).json({
-          error: "Failed to save supervisor check",
-        });
+       return res.status(500).json({
+  error: "Failed to save supervisor check",
+  details: err.message,
+  sqlMessage: err.sqlMessage,
+});
       }
 
       if (result.affectedRows === 0) {
